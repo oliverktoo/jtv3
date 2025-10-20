@@ -1,38 +1,221 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import {
+  type Tournament,
+  type InsertTournament,
+  type Team,
+  type InsertTeam,
+  type Match,
+  type InsertMatch,
+  type Organization,
+  type Sport,
+  type County,
+  tournaments,
+  teams,
+  matches,
+  organizations,
+  sports,
+  counties,
+  subCounties,
+  wards,
+  stages,
+  leagueDivisions,
+  groups,
+  teamGroups,
+  rounds,
+} from "@shared/schema";
+import { db } from "./db";
+import { eq, and, desc } from "drizzle-orm";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  // Tournaments
+  getTournaments(orgId: string): Promise<Tournament[]>;
+  getTournamentById(id: string): Promise<Tournament | undefined>;
+  getTournamentBySlug(slug: string): Promise<Tournament | undefined>;
+  createTournament(tournament: InsertTournament): Promise<Tournament>;
+  updateTournament(id: string, tournament: Partial<InsertTournament>): Promise<Tournament | undefined>;
+  deleteTournament(id: string): Promise<boolean>;
+
+  // Teams
+  getTeamsByTournament(tournamentId: string): Promise<Team[]>;
+  createTeam(team: InsertTeam): Promise<Team>;
+  createTeams(teams: InsertTeam[]): Promise<Team[]>;
+  updateTeam(id: string, team: Partial<InsertTeam>): Promise<Team | undefined>;
+  deleteTeam(id: string): Promise<boolean>;
+
+  // Matches
+  getMatchesByTournament(tournamentId: string): Promise<any[]>;
+  getMatchesByRound(roundId: string): Promise<Match[]>;
+  createMatch(match: InsertMatch): Promise<Match>;
+  updateMatch(id: string, match: Partial<InsertMatch>): Promise<Match | undefined>;
+
+  // Reference Data
+  getOrganizations(): Promise<Organization[]>;
+  getSports(): Promise<Sport[]>;
+  getCounties(): Promise<County[]>;
+  getSubCountiesByCounty(countyId: string): Promise<any[]>;
+  getWardsBySubCounty(subCountyId: string): Promise<any[]>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-
-  constructor() {
-    this.users = new Map();
+export class DbStorage implements IStorage {
+  // Tournaments
+  async getTournaments(orgId: string): Promise<Tournament[]> {
+    return await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.orgId, orgId))
+      .orderBy(desc(tournaments.createdAt));
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getTournamentById(id: string): Promise<Tournament | undefined> {
+    const result = await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.id, id))
+      .limit(1);
+    return result[0];
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async getTournamentBySlug(slug: string): Promise<Tournament | undefined> {
+    const result = await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.slug, slug))
+      .limit(1);
+    return result[0];
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async createTournament(tournament: InsertTournament): Promise<Tournament> {
+    const [created] = await db.insert(tournaments).values(tournament).returning();
+    
+    // Create default stage
+    const [stage] = await db.insert(stages).values({
+      tournamentId: created.id,
+      name: "Main Stage",
+      stageType: "LEAGUE",
+      seq: 1,
+    }).returning();
+
+    // Create default division
+    await db.insert(leagueDivisions).values({
+      stageId: stage.id,
+      name: "Division 1",
+      level: 1,
+      pointsWin: 3,
+      pointsDraw: 1,
+      pointsLoss: 0,
+      tiebreakers: ["POINTS", "GD", "GF", "H2H"],
+    });
+
+    return created;
+  }
+
+  async updateTournament(id: string, tournament: Partial<InsertTournament>): Promise<Tournament | undefined> {
+    const [updated] = await db
+      .update(tournaments)
+      .set({ ...tournament, updatedAt: new Date() })
+      .where(eq(tournaments.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTournament(id: string): Promise<boolean> {
+    const result = await db.delete(tournaments).where(eq(tournaments.id, id));
+    return true;
+  }
+
+  // Teams
+  async getTeamsByTournament(tournamentId: string): Promise<Team[]> {
+    return await db
+      .select()
+      .from(teams)
+      .where(eq(teams.tournamentId, tournamentId));
+  }
+
+  async createTeam(team: InsertTeam): Promise<Team> {
+    const [created] = await db.insert(teams).values(team).returning();
+    return created;
+  }
+
+  async createTeams(teamList: InsertTeam[]): Promise<Team[]> {
+    return await db.insert(teams).values(teamList).returning();
+  }
+
+  async updateTeam(id: string, team: Partial<InsertTeam>): Promise<Team | undefined> {
+    const [updated] = await db
+      .update(teams)
+      .set({ ...team, updatedAt: new Date() })
+      .where(eq(teams.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTeam(id: string): Promise<boolean> {
+    await db.delete(teams).where(eq(teams.id, id));
+    return true;
+  }
+
+  // Matches
+  async getMatchesByTournament(tournamentId: string): Promise<any[]> {
+    const result = await db
+      .select({
+        match: matches,
+        homeTeam: teams,
+        round: rounds,
+      })
+      .from(matches)
+      .leftJoin(teams, eq(matches.homeTeamId, teams.id))
+      .leftJoin(rounds, eq(matches.roundId, rounds.id))
+      .where(eq(teams.tournamentId, tournamentId));
+    
+    return result as any[];
+  }
+
+  async getMatchesByRound(roundId: string): Promise<Match[]> {
+    return await db
+      .select()
+      .from(matches)
+      .where(eq(matches.roundId, roundId));
+  }
+
+  async createMatch(match: InsertMatch): Promise<Match> {
+    const [created] = await db.insert(matches).values(match).returning();
+    return created;
+  }
+
+  async updateMatch(id: string, match: Partial<InsertMatch>): Promise<Match | undefined> {
+    const [updated] = await db
+      .update(matches)
+      .set({ ...match, updatedAt: new Date() })
+      .where(eq(matches.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Reference Data
+  async getOrganizations(): Promise<Organization[]> {
+    return await db.select().from(organizations);
+  }
+
+  async getSports(): Promise<Sport[]> {
+    return await db.select().from(sports);
+  }
+
+  async getCounties(): Promise<County[]> {
+    return await db.select().from(counties);
+  }
+
+  async getSubCountiesByCounty(countyId: string): Promise<any[]> {
+    return await db
+      .select()
+      .from(subCounties)
+      .where(eq(subCounties.countyId, countyId));
+  }
+
+  async getWardsBySubCounty(subCountyId: string): Promise<any[]> {
+    return await db
+      .select()
+      .from(wards)
+      .where(eq(wards.subCountyId, subCountyId));
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DbStorage();
