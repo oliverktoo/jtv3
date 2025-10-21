@@ -141,6 +141,25 @@ export const playerDocuments = pgTable("player_documents", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const tournamentPlayers = pgTable("tournament_players", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tournamentId: uuid("tournament_id").notNull().references(() => tournaments.id, { onDelete: "cascade" }),
+  upid: uuid("upid").notNull().references(() => playerRegistry.id, { onDelete: "cascade" }),
+  jerseyNumber: integer("jersey_number"),
+  position: text("position"),
+  registeredAt: timestamp("registered_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const rosterMembers = pgTable("roster_members", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tpid: uuid("tpid").notNull().references(() => tournamentPlayers.id, { onDelete: "cascade" }),
+  teamId: uuid("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+  leftAt: timestamp("left_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const tournaments = pgTable("tournaments", {
   id: uuid("id").primaryKey().defaultRandom(),
   orgId: uuid("org_id").notNull().references(() => organizations.id),
@@ -281,6 +300,18 @@ export const insertPlayerDocumentSchema = createInsertSchema(playerDocuments).om
   createdAt: true,
 });
 
+export const insertTournamentPlayerSchema = createInsertSchema(tournamentPlayers).omit({
+  id: true,
+  registeredAt: true,
+  createdAt: true,
+});
+
+export const insertRosterMemberSchema = createInsertSchema(rosterMembers).omit({
+  id: true,
+  joinedAt: true,
+  createdAt: true,
+});
+
 export const insertTournamentSchema = createInsertSchema(tournaments).omit({
   id: true,
   createdAt: true,
@@ -334,6 +365,12 @@ export type PlayerRegistry = typeof playerRegistry.$inferSelect;
 
 export type InsertPlayerDocument = z.infer<typeof insertPlayerDocumentSchema>;
 export type PlayerDocument = typeof playerDocuments.$inferSelect;
+
+export type InsertTournamentPlayer = z.infer<typeof insertTournamentPlayerSchema>;
+export type TournamentPlayer = typeof tournamentPlayers.$inferSelect;
+
+export type InsertRosterMember = z.infer<typeof insertRosterMemberSchema>;
+export type RosterMember = typeof rosterMembers.$inferSelect;
 
 export type InsertTournament = z.infer<typeof insertTournamentSchema>;
 export type Tournament = typeof tournaments.$inferSelect;

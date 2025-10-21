@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertTournamentSchema, insertTeamSchema, insertMatchSchema, insertPlayerRegistrySchema, insertPlayerDocumentSchema } from "@shared/schema";
+import { insertTournamentSchema, insertTeamSchema, insertMatchSchema, insertPlayerRegistrySchema, insertPlayerDocumentSchema, insertTournamentPlayerSchema, insertRosterMemberSchema } from "@shared/schema";
 import { z } from "zod";
 import { generateRoundRobinFixtures } from "./lib/fixtureGenerator";
 import { calculateStandings } from "./lib/standingsCalculator";
@@ -217,6 +217,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       await storage.deletePlayerDocument(req.params.id);
       res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Tournament Players (TPID)
+  app.get("/api/tournaments/:tournamentId/players", async (req, res) => {
+    try {
+      const players = await storage.getTournamentPlayers(req.params.tournamentId);
+      res.json(players);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/tournaments/:tournamentId/players", async (req, res) => {
+    try {
+      // Check if player already exists in this tournament
+      const existing = await storage.findTournamentPlayer(
+        req.params.tournamentId,
+        req.body.upid
+      );
+      
+      if (existing) {
+        return res.status(409).json({ 
+          error: "Player already registered in this tournament",
+          tpid: existing.id
+        });
+      }
+      
+      const validatedData = insertTournamentPlayerSchema.parse({
+        ...req.body,
+        tournamentId: req.params.tournamentId
+      });
+      
+      const tournamentPlayer = await storage.createTournamentPlayer(validatedData);
+      res.status(201).json(tournamentPlayer);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/tournament-players/:id", async (req, res) => {
+    try {
+      const tournamentPlayer = await storage.updateTournamentPlayer(req.params.id, req.body);
+      if (!tournamentPlayer) {
+        return res.status(404).json({ error: "Tournament player not found" });
+      }
+      res.json(tournamentPlayer);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Roster Members
+  app.get("/api/teams/:teamId/roster", async (req, res) => {
+    try {
+      const roster = await storage.getRosterMembersByTeam(req.params.teamId);
+      res.json(roster);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/tournaments/:tournamentId/roster", async (req, res) => {
+    try {
+      const roster = await storage.getRosterMembersByTournament(req.params.tournamentId);
+      res.json(roster);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/teams/:teamId/roster", async (req, res) => {
+    try {
+      const validatedData = insertRosterMemberSchema.parse({
+        ...req.body,
+        teamId: req.params.teamId
+      });
+      
+      const rosterMember = await storage.createRosterMember(validatedData);
+      res.status(201).json(rosterMember);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/roster-members/:id", async (req, res) => {
+    try {
+      const rosterMember = await storage.updateRosterMember(req.params.id, req.body);
+      if (!rosterMember) {
+        return res.status(404).json({ error: "Roster member not found" });
+      }
+      res.json(rosterMember);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

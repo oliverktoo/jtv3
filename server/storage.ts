@@ -12,6 +12,10 @@ import {
   type InsertPlayerRegistry,
   type PlayerDocument,
   type InsertPlayerDocument,
+  type TournamentPlayer,
+  type InsertTournamentPlayer,
+  type RosterMember,
+  type InsertRosterMember,
   tournaments,
   teams,
   matches,
@@ -27,6 +31,8 @@ import {
   rounds,
   playerRegistry,
   playerDocuments,
+  tournamentPlayers,
+  rosterMembers,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, or, ilike, sql } from "drizzle-orm";
@@ -66,6 +72,19 @@ export interface IStorage {
   createPlayerDocument(document: InsertPlayerDocument): Promise<PlayerDocument>;
   updatePlayerDocument(id: string, document: Partial<InsertPlayerDocument>): Promise<PlayerDocument | undefined>;
   deletePlayerDocument(id: string): Promise<boolean>;
+
+  // Tournament Players (TPID)
+  getTournamentPlayers(tournamentId: string): Promise<TournamentPlayer[]>;
+  getTournamentPlayerById(id: string): Promise<TournamentPlayer | undefined>;
+  findTournamentPlayer(tournamentId: string, upid: string): Promise<TournamentPlayer | undefined>;
+  createTournamentPlayer(tournamentPlayer: InsertTournamentPlayer): Promise<TournamentPlayer>;
+  updateTournamentPlayer(id: string, tournamentPlayer: Partial<InsertTournamentPlayer>): Promise<TournamentPlayer | undefined>;
+
+  // Roster Members
+  getRosterMembersByTeam(teamId: string): Promise<any[]>;
+  getRosterMembersByTournament(tournamentId: string): Promise<any[]>;
+  createRosterMember(rosterMember: InsertRosterMember): Promise<RosterMember>;
+  updateRosterMember(id: string, rosterMember: Partial<InsertRosterMember>): Promise<RosterMember | undefined>;
 
   // Reference Data
   getOrganizations(): Promise<Organization[]>;
@@ -325,6 +344,123 @@ export class DbStorage implements IStorage {
   async deletePlayerDocument(id: string): Promise<boolean> {
     await db.delete(playerDocuments).where(eq(playerDocuments.id, id));
     return true;
+  }
+
+  // Tournament Players (TPID)
+  async getTournamentPlayers(tournamentId: string): Promise<TournamentPlayer[]> {
+    return await db
+      .select()
+      .from(tournamentPlayers)
+      .where(eq(tournamentPlayers.tournamentId, tournamentId))
+      .orderBy(desc(tournamentPlayers.registeredAt));
+  }
+
+  async getTournamentPlayerById(id: string): Promise<TournamentPlayer | undefined> {
+    const result = await db
+      .select()
+      .from(tournamentPlayers)
+      .where(eq(tournamentPlayers.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async findTournamentPlayer(tournamentId: string, upid: string): Promise<TournamentPlayer | undefined> {
+    const result = await db
+      .select()
+      .from(tournamentPlayers)
+      .where(
+        and(
+          eq(tournamentPlayers.tournamentId, tournamentId),
+          eq(tournamentPlayers.upid, upid)
+        )
+      )
+      .limit(1);
+    return result[0];
+  }
+
+  async createTournamentPlayer(tournamentPlayer: InsertTournamentPlayer): Promise<TournamentPlayer> {
+    const [created] = await db.insert(tournamentPlayers).values(tournamentPlayer).returning();
+    return created;
+  }
+
+  async updateTournamentPlayer(id: string, tournamentPlayer: Partial<InsertTournamentPlayer>): Promise<TournamentPlayer | undefined> {
+    const [updated] = await db
+      .update(tournamentPlayers)
+      .set(tournamentPlayer)
+      .where(eq(tournamentPlayers.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Roster Members
+  async getRosterMembersByTeam(teamId: string): Promise<any[]> {
+    return await db
+      .select({
+        id: rosterMembers.id,
+        tpid: rosterMembers.tpid,
+        teamId: rosterMembers.teamId,
+        joinedAt: rosterMembers.joinedAt,
+        leftAt: rosterMembers.leftAt,
+        jerseyNumber: tournamentPlayers.jerseyNumber,
+        position: tournamentPlayers.position,
+        upid: tournamentPlayers.upid,
+        firstName: playerRegistry.firstName,
+        lastName: playerRegistry.lastName,
+        dob: playerRegistry.dob,
+        sex: playerRegistry.sex,
+      })
+      .from(rosterMembers)
+      .innerJoin(tournamentPlayers, eq(rosterMembers.tpid, tournamentPlayers.id))
+      .innerJoin(playerRegistry, eq(tournamentPlayers.upid, playerRegistry.id))
+      .where(
+        and(
+          eq(rosterMembers.teamId, teamId),
+          sql`${rosterMembers.leftAt} IS NULL`
+        )
+      )
+      .orderBy(desc(rosterMembers.joinedAt));
+  }
+
+  async getRosterMembersByTournament(tournamentId: string): Promise<any[]> {
+    return await db
+      .select({
+        id: rosterMembers.id,
+        tpid: rosterMembers.tpid,
+        teamId: rosterMembers.teamId,
+        teamName: teams.name,
+        joinedAt: rosterMembers.joinedAt,
+        leftAt: rosterMembers.leftAt,
+        jerseyNumber: tournamentPlayers.jerseyNumber,
+        position: tournamentPlayers.position,
+        upid: tournamentPlayers.upid,
+        firstName: playerRegistry.firstName,
+        lastName: playerRegistry.lastName,
+      })
+      .from(rosterMembers)
+      .innerJoin(tournamentPlayers, eq(rosterMembers.tpid, tournamentPlayers.id))
+      .innerJoin(playerRegistry, eq(tournamentPlayers.upid, playerRegistry.id))
+      .innerJoin(teams, eq(rosterMembers.teamId, teams.id))
+      .where(
+        and(
+          eq(tournamentPlayers.tournamentId, tournamentId),
+          sql`${rosterMembers.leftAt} IS NULL`
+        )
+      )
+      .orderBy(desc(rosterMembers.joinedAt));
+  }
+
+  async createRosterMember(rosterMember: InsertRosterMember): Promise<RosterMember> {
+    const [created] = await db.insert(rosterMembers).values(rosterMember).returning();
+    return created;
+  }
+
+  async updateRosterMember(id: string, rosterMember: Partial<InsertRosterMember>): Promise<RosterMember | undefined> {
+    const [updated] = await db
+      .update(rosterMembers)
+      .set(rosterMember)
+      .where(eq(rosterMembers.id, id))
+      .returning();
+    return updated;
   }
 }
 
