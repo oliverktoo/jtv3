@@ -374,6 +374,13 @@ export const insertEligibilityRuleSchema = createInsertSchema(eligibilityRules).
   updatedAt: true,
 });
 
+export const updateEligibilityRuleSchema = createInsertSchema(eligibilityRules).omit({
+  id: true,
+  tournamentId: true,
+  createdAt: true,
+  updatedAt: true,
+}).partial();
+
 // Types
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type Organization = typeof organizations.$inferSelect;
@@ -418,4 +425,5 @@ export type InsertMatch = z.infer<typeof insertMatchSchema>;
 export type Match = typeof matches.$inferSelect;
 
 export type InsertEligibilityRule = z.infer<typeof insertEligibilityRuleSchema>;
+export type UpdateEligibilityRule = z.infer<typeof updateEligibilityRuleSchema>;
 export type EligibilityRule = typeof eligibilityRules.$inferSelect;

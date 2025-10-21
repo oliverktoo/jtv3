@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useTeamRoster, useCreateTournamentPlayer, useCreateRosterMember } from "@/hooks/useTournamentPlayers";
 import { usePlayers } from "@/hooks/usePlayers";
 import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import type { Team, Tournament } from "@shared/schema";
 import { format } from "date-fns";
 
@@ -65,11 +66,44 @@ export default function TeamRoster() {
 
   const onSubmit = async (data: AddPlayerFormValues) => {
     try {
-      // First, create tournament player (TPID) if not already exists
+      // Guard: Ensure tournament is loaded before proceeding
+      if (!tournament) {
+        toast({
+          title: "Error",
+          description: "Tournament data is not loaded yet. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // First, check eligibility
+      const eligibilityResponse = await apiRequest(
+        "POST",
+        `/api/tournaments/${tournament.id}/check-eligibility`,
+        { upid: data.upid }
+      );
+      const eligibilityResult = await eligibilityResponse.json();
+
+      if (!eligibilityResult.isEligible) {
+        // Show detailed eligibility violations
+        const violations = eligibilityResult.violations
+          .map((v: any) => `• ${v.reason}`)
+          .join("\n");
+        
+        toast({
+          title: "Player not eligible",
+          description: `${selectedPlayer?.firstName} ${selectedPlayer?.lastName} cannot be added to this tournament:\n\n${violations}`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Player is eligible, proceed with normal flow
+      // Create tournament player (TPID) if not already exists
       let tpid = "";
       try {
-        const response: any = await createTournamentPlayer.mutateAsync({
-          tournamentId: tournament!.id,
+        const response = await createTournamentPlayer.mutateAsync({
+          tournamentId: tournament.id,
           upid: data.upid,
           jerseyNumber: data.jerseyNumber,
           position: data.position,
@@ -77,7 +111,7 @@ export default function TeamRoster() {
         const tournamentPlayer = await response.json();
         tpid = tournamentPlayer.id;
       } catch (error: any) {
-        // If 409, player already exists in tournament
+        // If 409, player already exists in tournament (error.data is already parsed)
         if (error.status === 409) {
           tpid = error.data.tpid;
         } else {

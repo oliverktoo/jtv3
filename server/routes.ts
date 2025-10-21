@@ -322,6 +322,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Eligibility
+  app.post("/api/tournaments/:tournamentId/check-eligibility", async (req, res) => {
+    try {
+      const { upid } = req.body;
+      if (!upid) {
+        return res.status(400).json({ error: "upid is required" });
+      }
+      
+      const { checkPlayerEligibility } = await import("./eligibilityEngine");
+      const result = await checkPlayerEligibility(upid, req.params.tournamentId);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/tournaments/:tournamentId/eligibility-rules", async (req, res) => {
+    try {
+      const rules = await storage.getEligibilityRulesByTournament(req.params.tournamentId);
+      res.json(rules);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/tournaments/:tournamentId/eligibility-rules", async (req, res) => {
+    try {
+      const { insertEligibilityRuleSchema } = await import("@shared/schema");
+      const validatedData = insertEligibilityRuleSchema.parse({
+        ...req.body,
+        tournamentId: req.params.tournamentId,
+      });
+      
+      const rule = await storage.createEligibilityRule(validatedData);
+      res.status(201).json(rule);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/eligibility-rules/:id", async (req, res) => {
+    try {
+      const { updateEligibilityRuleSchema } = await import("@shared/schema");
+      // Validate update data using dedicated update schema
+      const validatedData = updateEligibilityRuleSchema.parse(req.body);
+      
+      const rule = await storage.updateEligibilityRule(req.params.id, validatedData);
+      if (!rule) {
+        return res.status(404).json({ error: "Eligibility rule not found" });
+      }
+      res.json(rule);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/eligibility-rules/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteEligibilityRule(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Eligibility rule not found" });
+      }
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Tournaments
   app.get("/api/tournaments", async (req, res) => {
     try {

@@ -16,6 +16,8 @@ import {
   type InsertTournamentPlayer,
   type RosterMember,
   type InsertRosterMember,
+  type EligibilityRule,
+  type InsertEligibilityRule,
   tournaments,
   teams,
   matches,
@@ -33,6 +35,7 @@ import {
   playerDocuments,
   tournamentPlayers,
   rosterMembers,
+  eligibilityRules,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, or, ilike, sql } from "drizzle-orm";
@@ -85,6 +88,13 @@ export interface IStorage {
   getRosterMembersByTournament(tournamentId: string): Promise<any[]>;
   createRosterMember(rosterMember: InsertRosterMember): Promise<RosterMember>;
   updateRosterMember(id: string, rosterMember: Partial<InsertRosterMember>): Promise<RosterMember | undefined>;
+
+  // Eligibility Rules
+  getEligibilityRulesByTournament(tournamentId: string): Promise<EligibilityRule[]>;
+  getEligibilityRuleById(id: string): Promise<EligibilityRule | undefined>;
+  createEligibilityRule(rule: InsertEligibilityRule): Promise<EligibilityRule>;
+  updateEligibilityRule(id: string, rule: Partial<InsertEligibilityRule>): Promise<EligibilityRule | undefined>;
+  deleteEligibilityRule(id: string): Promise<boolean>;
 
   // Reference Data
   getOrganizations(): Promise<Organization[]>;
@@ -461,6 +471,46 @@ export class DbStorage implements IStorage {
       .where(eq(rosterMembers.id, id))
       .returning();
     return updated;
+  }
+
+  // Eligibility Rules
+  async getEligibilityRulesByTournament(tournamentId: string): Promise<EligibilityRule[]> {
+    return await db
+      .select()
+      .from(eligibilityRules)
+      .where(eq(eligibilityRules.tournamentId, tournamentId))
+      .orderBy(desc(eligibilityRules.createdAt));
+  }
+
+  async getEligibilityRuleById(id: string): Promise<EligibilityRule | undefined> {
+    const result = await db
+      .select()
+      .from(eligibilityRules)
+      .where(eq(eligibilityRules.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async createEligibilityRule(rule: InsertEligibilityRule): Promise<EligibilityRule> {
+    const [created] = await db.insert(eligibilityRules).values(rule).returning();
+    return created;
+  }
+
+  async updateEligibilityRule(id: string, rule: Partial<InsertEligibilityRule>): Promise<EligibilityRule | undefined> {
+    const [updated] = await db
+      .update(eligibilityRules)
+      .set({ ...rule, updatedAt: new Date() })
+      .where(eq(eligibilityRules.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteEligibilityRule(id: string): Promise<boolean> {
+    const result = await db
+      .delete(eligibilityRules)
+      .where(eq(eligibilityRules.id, id))
+      .returning();
+    return result.length > 0;
   }
 }
 
