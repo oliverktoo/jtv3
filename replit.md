@@ -1,0 +1,123 @@
+# Jamii Tourney v3 - Tournament Management Platform
+
+## Overview
+
+Jamii Tourney v3 is a multi-model tournament management platform designed for Kenyan sports organizations. The application supports multiple tournament formats including administrative hierarchies (Ward → Sub-County → County → National), inter-county competitions, independent tournaments, and full league systems. The platform enables tournament organizers to create tournaments, register teams, generate fixtures with configurable scheduling rules (weekend defaults, kickoff times), calculate standings, and export data to Excel.
+
+**Core Value Proposition**: A unified system that handles diverse tournament models with clear data isolation by organization and sport, predictable status lifecycles, and efficient fixture scheduling.
+
+## User Preferences
+
+Preferred communication style: Simple, everyday language.
+
+## System Architecture
+
+### Frontend Architecture
+
+**Framework**: React 18 with Vite as the build tool
+
+**UI Component Library**: Shadcn UI (New York style) built on Radix UI primitives
+- Component-based architecture with reusable UI elements
+- Tailwind CSS for styling with custom design tokens
+- Dark/light theme support with CSS variables
+- Custom color palette centered around sports/competition theme (deep green primary: HSL 25 85% 45%)
+
+**State Management**:
+- TanStack Query (React Query) for server state management
+- Custom hooks pattern for data fetching and mutations
+- Query invalidation strategy for cache management
+
+**Routing**: Wouter for lightweight client-side routing
+
+**Key Design Decisions**:
+- **Problem**: Information-dense tournament management interfaces require clarity
+- **Solution**: Utility-focused design system with scannable hierarchies, inspired by sports platforms
+- **Rationale**: Prioritizes data clarity over decoration for efficient task completion
+
+### Backend Architecture
+
+**Runtime**: Node.js with TypeScript (ESM modules)
+
+**Framework**: Express.js server with custom middleware
+- Request logging with duration tracking
+- JSON body parsing
+- Error handling middleware
+
+**API Design**: RESTful API pattern
+- Resource-based endpoints (`/api/tournaments`, `/api/teams`, `/api/matches`)
+- Nested routes for related resources (e.g., `/api/tournaments/:id/teams`)
+- Standard HTTP methods (GET, POST, PATCH, DELETE)
+
+**Business Logic Modules**:
+- `fixtureGenerator.ts`: Implements round-robin fixture generation using the "circle method" with configurable scheduling (weekend-only, kickoff times, home/away legs)
+- `standingsCalculator.ts`: Calculates league standings with configurable point systems and tiebreakers (points, goal difference, head-to-head)
+
+**Key Design Decisions**:
+- **Problem**: Multiple tournament models with different fixture requirements
+- **Solution**: Pluggable fixture generation with options pattern
+- **Rationale**: Single generator handles all tournament types through configuration rather than separate implementations
+
+### Database Architecture
+
+**Database**: PostgreSQL (via Neon serverless)
+
+**ORM**: Drizzle ORM with TypeScript schema definitions
+- Type-safe database operations
+- Schema-first approach with `shared/schema.ts`
+- Zod integration for runtime validation
+
+**Data Model**:
+- Multi-tenancy by `organization` (org-scoped isolation)
+- Sport-specific isolation for tournaments
+- Hierarchical geographic data (Counties → Sub-Counties → Wards)
+- Tournament lifecycle management via status enum (DRAFT → REGISTRATION → ACTIVE → COMPLETED → ARCHIVED)
+- Support for multiple tournament models via enum
+- Stage-based competition structure (LEAGUE, GROUP, KNOCKOUT)
+- Match scheduling with status tracking
+
+**Key Design Decisions**:
+- **Problem**: Platform must safely support multiple organizations and sports
+- **Solution**: Strict org-scoping and sport-isolation at the database level
+- **Rationale**: Prevents data leakage and enables safe multi-tenancy without complex row-level security
+
+**Schema Highlights**:
+- Enums for tournament models, statuses, federation types, stage types, match statuses
+- UUID primary keys for all entities
+- Timestamp tracking (createdAt, updatedAt)
+- JSONB fields for flexible configuration storage
+- Relational integrity through foreign keys
+
+### External Dependencies
+
+**Database Service**: Neon (PostgreSQL serverless)
+- Connection pooling via `@neondatabase/serverless`
+- WebSocket support for serverless environments
+- Configured via `DATABASE_URL` environment variable
+
+**UI Component Libraries**:
+- Radix UI: Headless accessible components
+- Lucide React: Icon system
+- Tailwind CSS: Utility-first styling
+- shadcn/ui: Pre-built component templates
+
+**Utility Libraries**:
+- date-fns: Date manipulation and formatting
+- zod: Runtime schema validation
+- clsx + tailwind-merge: Conditional CSS class management
+- XLSX (SheetJS): Excel export functionality
+
+**Development Tools**:
+- TypeScript: Type safety across stack
+- Drizzle Kit: Database migrations
+- Vite plugins for Replit integration (dev banner, cartographer, runtime error modal)
+
+**Key Design Decisions**:
+- **Problem**: Need reliable serverless database with good TypeScript support
+- **Solution**: Neon + Drizzle ORM combination
+- **Rationale**: Neon provides serverless PostgreSQL with WebSocket support; Drizzle offers excellent TypeScript integration and migration tooling
+
+**Deployment Strategy**:
+- Build process: `vite build` for client, `esbuild` for server
+- Production server runs compiled ESM bundle
+- Static assets served from `dist/public`
+- Development mode uses Vite middleware with HMR
