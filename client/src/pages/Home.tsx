@@ -12,23 +12,23 @@ export default function Home() {
   const orgId = organizations?.[0]?.id || "";
   const { data: tournaments, isLoading } = useTournaments(orgId);
 
-  const activeTournaments = tournaments?.filter((t) => t.status === "ACTIVE") || [];
-  const recentTournaments = tournaments?.slice(0, 3) || [];
-
-  const stats = [
-    { label: "Active Tournaments", value: activeTournaments.length.toString(), icon: Trophy, color: "bg-chart-1/10" },
-    { label: "Total Tournaments", value: tournaments?.length.toString() || "0", icon: Calendar, color: "bg-chart-2/10" },
-    { label: "Registered Teams", value: "156", icon: Users, color: "bg-chart-3/10" },
-    { label: "Matches Played", value: "234", icon: Target, color: "bg-chart-4/10" },
-  ];
-
-  if (isLoading) {
+  if (isLoading || !tournaments) {
     return (
       <div className="flex items-center justify-center h-64">
         <p className="text-muted-foreground">Loading...</p>
       </div>
     );
   }
+
+  const activeTournaments = tournaments.filter((t) => t.status === "ACTIVE");
+  const recentTournaments = tournaments.slice(0, 3);
+
+  const stats = [
+    { label: "Active Tournaments", value: activeTournaments.length.toString(), icon: Trophy, color: "bg-chart-1/10" },
+    { label: "Total Tournaments", value: tournaments.length.toString(), icon: Calendar, color: "bg-chart-2/10" },
+    { label: "Registered Teams", value: "156", icon: Users, color: "bg-chart-3/10" },
+    { label: "Matches Played", value: "234", icon: Target, color: "bg-chart-4/10" },
+  ];
 
   return (
     <div className="space-y-8">
