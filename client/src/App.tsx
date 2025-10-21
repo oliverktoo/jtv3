@@ -11,12 +11,14 @@ import Home from "@/pages/Home";
 import Tournaments from "@/pages/Tournaments";
 import Fixtures from "@/pages/Fixtures";
 import Standings from "@/pages/Standings";
+import Players from "@/pages/Players";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/tournaments" component={Tournaments} />
+      <Route path="/players" component={Players} />
       <Route path="/fixtures" component={Fixtures} />
       <Route path="/standings" component={Standings} />
       <Route component={NotFound} />

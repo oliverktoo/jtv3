@@ -108,12 +108,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/players", async (req, res) => {
     try {
-      const validatedData = insertPlayerRegistrySchema.parse(req.body);
+      // Extract and validate request body
+      const { docType, docNumber, ...playerData } = req.body;
+      
+      // Generate HMAC-SHA256 hash for identity keys
+      let hashedKeys = "";
+      if (docType && docNumber) {
+        hashedKeys = hashIdentityKey(playerData.orgId, docType, docNumber);
+      } else {
+        // Use a combination of name + DOB as fallback identity
+        hashedKeys = hashIdentityKey(
+          playerData.orgId,
+          "NAME_DOB",
+          `${playerData.firstName}${playerData.lastName}${playerData.dob || ""}`
+        );
+      }
+      
+      // Validate with hashed keys
+      const validatedData = insertPlayerRegistrySchema.parse({
+        ...playerData,
+        hashedIdentityKeys: hashedKeys,
+      });
       
       // Check for duplicates using hashed identity keys
       const duplicates = await storage.findDuplicatePlayers(
         validatedData.orgId,
-        validatedData.hashedIdentityKeys
+        hashedKeys
       );
       
       if (duplicates.length > 0) {
