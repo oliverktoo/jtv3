@@ -9,6 +9,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Tournaments from "@/pages/Tournaments";
+import TournamentDetail from "@/pages/TournamentDetail";
 import Fixtures from "@/pages/Fixtures";
 import Standings from "@/pages/Standings";
 import Players from "@/pages/Players";
@@ -19,6 +20,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/tournaments" component={Tournaments} />
+      <Route path="/tournaments/:tournamentId" component={TournamentDetail} />
       <Route path="/players" component={Players} />
       <Route path="/teams/:teamId/roster" component={TeamRoster} />
       <Route path="/fixtures" component={Fixtures} />

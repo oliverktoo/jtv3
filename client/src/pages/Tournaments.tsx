@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import TournamentCard from "@/components/TournamentCard";
 import CreateTournamentDialog from "@/components/CreateTournamentDialog";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,7 @@ export default function Tournaments() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   const { data: organizations } = useOrganizations();
   const orgId = organizations?.[0]?.id || "";
@@ -114,7 +116,7 @@ export default function Tournaments() {
               startDate={tournament.startDate}
               endDate={tournament.endDate}
               sport="Football"
-              onView={() => console.log("View", tournament.id)}
+              onView={() => setLocation(`/tournaments/${tournament.id}`)}
               onEdit={() => console.log("Edit", tournament.id)}
               onDelete={() => handleDelete(tournament.id, tournament.name)}
             />

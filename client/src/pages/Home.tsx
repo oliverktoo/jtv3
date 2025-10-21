@@ -5,12 +5,13 @@ import CreateTournamentDialog from "@/components/CreateTournamentDialog";
 import { Button } from "@/components/ui/button";
 import { useTournaments } from "@/hooks/useTournaments";
 import { useOrganizations } from "@/hooks/useReferenceData";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 
 export default function Home() {
   const { data: organizations } = useOrganizations();
   const orgId = organizations?.[0]?.id || "";
   const { data: tournaments, isLoading } = useTournaments(orgId);
+  const [, setLocation] = useLocation();
 
   if (isLoading || !tournaments) {
     return (
@@ -71,7 +72,7 @@ export default function Home() {
                 startDate={tournament.startDate}
                 endDate={tournament.endDate}
                 sport="Football"
-                onView={() => console.log("View", tournament.id)}
+                onView={() => setLocation(`/tournaments/${tournament.id}`)}
                 onEdit={() => console.log("Edit", tournament.id)}
                 onDelete={() => console.log("Delete", tournament.id)}
               />
