@@ -75,6 +75,12 @@ export const playerStatusEnum = pgEnum("player_status_enum", [
   "RETIRED",
 ]);
 
+export const eligibilityRuleTypeEnum = pgEnum("eligibility_rule_type_enum", [
+  "AGE_RANGE",
+  "GEOGRAPHIC",
+  "PLAYER_STATUS",
+]);
+
 // Core Tables
 export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -158,6 +164,18 @@ export const rosterMembers = pgTable("roster_members", {
   joinedAt: timestamp("joined_at").defaultNow().notNull(),
   leftAt: timestamp("left_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const eligibilityRules = pgTable("eligibility_rules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tournamentId: uuid("tournament_id").notNull().references(() => tournaments.id, { onDelete: "cascade" }),
+  ruleType: eligibilityRuleTypeEnum("rule_type").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  config: jsonb("config").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const tournaments = pgTable("tournaments", {
@@ -350,6 +368,12 @@ export const insertMatchSchema = createInsertSchema(matches).omit({
   updatedAt: true,
 });
 
+export const insertEligibilityRuleSchema = createInsertSchema(eligibilityRules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type Organization = typeof organizations.$inferSelect;
@@ -392,3 +416,6 @@ export type Round = typeof rounds.$inferSelect;
 
 export type InsertMatch = z.infer<typeof insertMatchSchema>;
 export type Match = typeof matches.$inferSelect;
+
+export type InsertEligibilityRule = z.infer<typeof insertEligibilityRuleSchema>;
+export type EligibilityRule = typeof eligibilityRules.$inferSelect;
