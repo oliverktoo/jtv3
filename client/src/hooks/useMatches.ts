@@ -5,7 +5,10 @@ import type { Match } from "@shared/schema";
 export function useMatches(tournamentId: string) {
   return useQuery<any[]>({
     queryKey: ["/api/tournaments", tournamentId, "matches"],
-    queryFn: () => apiRequest("GET", `/api/tournaments/${tournamentId}/matches`),
+    queryFn: async () => {
+      const response = await apiRequest("GET", `/api/tournaments/${tournamentId}/matches`);
+      return response.json();
+    },
     enabled: !!tournamentId,
   });
 }
@@ -13,7 +16,10 @@ export function useMatches(tournamentId: string) {
 export function useStandings(tournamentId: string) {
   return useQuery<any[]>({
     queryKey: ["/api/tournaments", tournamentId, "standings"],
-    queryFn: () => apiRequest("GET", `/api/tournaments/${tournamentId}/standings`),
+    queryFn: async () => {
+      const response = await apiRequest("GET", `/api/tournaments/${tournamentId}/standings`);
+      return response.json();
+    },
     enabled: !!tournamentId,
   });
 }

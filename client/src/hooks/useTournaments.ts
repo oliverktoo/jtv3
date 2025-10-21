@@ -5,7 +5,10 @@ import type { Tournament, InsertTournament } from "@shared/schema";
 export function useTournaments(orgId: string) {
   return useQuery<Tournament[]>({
     queryKey: ["/api/tournaments", orgId],
-    queryFn: () => apiRequest("GET", `/api/tournaments?orgId=${orgId}`),
+    queryFn: async () => {
+      const response = await apiRequest("GET", `/api/tournaments?orgId=${orgId}`);
+      return response.json();
+    },
     enabled: !!orgId,
   });
 }
@@ -13,7 +16,10 @@ export function useTournaments(orgId: string) {
 export function useTournament(id: string) {
   return useQuery<Tournament>({
     queryKey: ["/api/tournaments", id],
-    queryFn: () => apiRequest("GET", `/api/tournaments/${id}`),
+    queryFn: async () => {
+      const response = await apiRequest("GET", `/api/tournaments/${id}`);
+      return response.json();
+    },
     enabled: !!id,
   });
 }

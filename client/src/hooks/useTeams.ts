@@ -5,7 +5,10 @@ import type { Team, InsertTeam } from "@shared/schema";
 export function useTeams(tournamentId: string) {
   return useQuery<Team[]>({
     queryKey: ["/api/tournaments", tournamentId, "teams"],
-    queryFn: () => apiRequest("GET", `/api/tournaments/${tournamentId}/teams`),
+    queryFn: async () => {
+      const response = await apiRequest("GET", `/api/tournaments/${tournamentId}/teams`);
+      return response.json();
+    },
     enabled: !!tournamentId,
   });
 }
