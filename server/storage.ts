@@ -8,6 +8,10 @@ import {
   type Organization,
   type Sport,
   type County,
+  type PlayerRegistry,
+  type InsertPlayerRegistry,
+  type PlayerDocument,
+  type InsertPlayerDocument,
   tournaments,
   teams,
   matches,
@@ -21,9 +25,11 @@ import {
   groups,
   teamGroups,
   rounds,
+  playerRegistry,
+  playerDocuments,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, or, ilike, sql } from "drizzle-orm";
 
 export interface IStorage {
   // Tournaments
@@ -46,6 +52,20 @@ export interface IStorage {
   getMatchesByRound(roundId: string): Promise<Match[]>;
   createMatch(match: InsertMatch): Promise<Match>;
   updateMatch(id: string, match: Partial<InsertMatch>): Promise<Match | undefined>;
+
+  // Players
+  getPlayersByOrg(orgId: string): Promise<PlayerRegistry[]>;
+  getPlayerById(id: string): Promise<PlayerRegistry | undefined>;
+  searchPlayers(orgId: string, query: string): Promise<PlayerRegistry[]>;
+  findDuplicatePlayers(orgId: string, hashedIdentityKeys: string): Promise<PlayerRegistry[]>;
+  createPlayer(player: InsertPlayerRegistry): Promise<PlayerRegistry>;
+  updatePlayer(id: string, player: Partial<InsertPlayerRegistry>): Promise<PlayerRegistry | undefined>;
+  
+  // Player Documents
+  getPlayerDocuments(upid: string): Promise<PlayerDocument[]>;
+  createPlayerDocument(document: InsertPlayerDocument): Promise<PlayerDocument>;
+  updatePlayerDocument(id: string, document: Partial<InsertPlayerDocument>): Promise<PlayerDocument | undefined>;
+  deletePlayerDocument(id: string): Promise<boolean>;
 
   // Reference Data
   getOrganizations(): Promise<Organization[]>;
@@ -215,6 +235,96 @@ export class DbStorage implements IStorage {
       .select()
       .from(wards)
       .where(eq(wards.subCountyId, subCountyId));
+  }
+
+  // Players
+  async getPlayersByOrg(orgId: string): Promise<PlayerRegistry[]> {
+    return await db
+      .select()
+      .from(playerRegistry)
+      .where(eq(playerRegistry.orgId, orgId))
+      .orderBy(desc(playerRegistry.createdAt));
+  }
+
+  async getPlayerById(id: string): Promise<PlayerRegistry | undefined> {
+    const result = await db
+      .select()
+      .from(playerRegistry)
+      .where(eq(playerRegistry.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async searchPlayers(orgId: string, query: string): Promise<PlayerRegistry[]> {
+    return await db
+      .select()
+      .from(playerRegistry)
+      .where(
+        and(
+          eq(playerRegistry.orgId, orgId),
+          or(
+            ilike(playerRegistry.firstName, `%${query}%`),
+            ilike(playerRegistry.lastName, `%${query}%`),
+            ilike(sql`CONCAT(${playerRegistry.firstName}, ' ', ${playerRegistry.lastName})`, `%${query}%`)
+          )
+        )
+      )
+      .orderBy(desc(playerRegistry.createdAt))
+      .limit(20);
+  }
+
+  async findDuplicatePlayers(orgId: string, hashedIdentityKeys: string): Promise<PlayerRegistry[]> {
+    return await db
+      .select()
+      .from(playerRegistry)
+      .where(
+        and(
+          eq(playerRegistry.orgId, orgId),
+          eq(playerRegistry.hashedIdentityKeys, hashedIdentityKeys)
+        )
+      );
+  }
+
+  async createPlayer(player: InsertPlayerRegistry): Promise<PlayerRegistry> {
+    const [created] = await db.insert(playerRegistry).values(player).returning();
+    return created;
+  }
+
+  async updatePlayer(id: string, player: Partial<InsertPlayerRegistry>): Promise<PlayerRegistry | undefined> {
+    const [updated] = await db
+      .update(playerRegistry)
+      .set({ ...player, updatedAt: new Date() })
+      .where(eq(playerRegistry.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Player Documents
+  async getPlayerDocuments(upid: string): Promise<PlayerDocument[]> {
+    return await db
+      .select()
+      .from(playerDocuments)
+      .where(eq(playerDocuments.upid, upid))
+      .orderBy(desc(playerDocuments.createdAt));
+  }
+
+  async createPlayerDocument(document: InsertPlayerDocument): Promise<PlayerDocument> {
+    const [created] = await db.insert(playerDocuments).values(document).returning();
+    return created;
+  }
+
+  async updatePlayerDocument(id: string, document: Partial<InsertPlayerDocument>): Promise<PlayerDocument | undefined> {
+    const [updated] = await db
+      .update(playerDocuments)
+      .set(document)
+      .where(eq(playerDocuments.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deletePlayerDocument(id: string): Promise<boolean> {
+    await db.delete(playerDocuments).where(eq(playerDocuments.id, id));
+    return true;
   }
 }
 

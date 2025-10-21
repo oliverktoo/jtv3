@@ -54,6 +54,27 @@ export const matchStatusEnum = pgEnum("match_status_enum", [
   "CANCELLED",
 ]);
 
+export const documentTypeEnum = pgEnum("document_type_enum", [
+  "NATIONAL_ID",
+  "PASSPORT",
+  "BIRTH_CERTIFICATE",
+  "GUARDIAN_ID",
+  "OTHER",
+]);
+
+export const sexEnum = pgEnum("sex_enum", [
+  "MALE",
+  "FEMALE",
+  "OTHER",
+]);
+
+export const playerStatusEnum = pgEnum("player_status_enum", [
+  "ACTIVE",
+  "INACTIVE",
+  "SUSPENDED",
+  "RETIRED",
+]);
+
 // Core Tables
 export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -91,6 +112,35 @@ export const wards = pgTable("wards", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const playerRegistry = pgTable("player_registry", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgId: uuid("org_id").notNull().references(() => organizations.id),
+  hashedIdentityKeys: text("hashed_identity_keys").notNull(),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  dob: date("dob"),
+  sex: sexEnum("sex"),
+  nationality: varchar("nationality", { length: 100 }),
+  photoPath: text("photo_path"),
+  wardId: uuid("ward_id").references(() => wards.id),
+  status: playerStatusEnum("status").notNull().default("ACTIVE"),
+  createdBy: uuid("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const playerDocuments = pgTable("player_documents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  upid: uuid("upid").notNull().references(() => playerRegistry.id, { onDelete: "cascade" }),
+  docType: documentTypeEnum("doc_type").notNull(),
+  docNumberHash: text("doc_number_hash").notNull(),
+  documentPath: text("document_path"),
+  verified: boolean("verified").notNull().default(false),
+  verifiedAt: timestamp("verified_at"),
+  uploadedBy: uuid("uploaded_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const tournaments = pgTable("tournaments", {
   id: uuid("id").primaryKey().defaultRandom(),
   orgId: uuid("org_id").notNull().references(() => organizations.id),
@@ -119,6 +169,8 @@ export const teams = pgTable("teams", {
   name: text("name").notNull(),
   code: varchar("code", { length: 10 }),
   countyId: uuid("county_id").references(() => counties.id),
+  subCountyId: uuid("sub_county_id").references(() => subCounties.id),
+  wardId: uuid("ward_id").references(() => wards.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -218,6 +270,17 @@ export const insertCountySchema = createInsertSchema(counties).omit({
   createdAt: true,
 });
 
+export const insertPlayerRegistrySchema = createInsertSchema(playerRegistry).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPlayerDocumentSchema = createInsertSchema(playerDocuments).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertTournamentSchema = createInsertSchema(tournaments).omit({
   id: true,
   createdAt: true,
@@ -265,6 +328,12 @@ export type Sport = typeof sports.$inferSelect;
 
 export type InsertCounty = z.infer<typeof insertCountySchema>;
 export type County = typeof counties.$inferSelect;
+
+export type InsertPlayerRegistry = z.infer<typeof insertPlayerRegistrySchema>;
+export type PlayerRegistry = typeof playerRegistry.$inferSelect;
+
+export type InsertPlayerDocument = z.infer<typeof insertPlayerDocumentSchema>;
+export type PlayerDocument = typeof playerDocuments.$inferSelect;
 
 export type InsertTournament = z.infer<typeof insertTournamentSchema>;
 export type Tournament = typeof tournaments.$inferSelect;
