@@ -1,13 +1,23 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertTournamentSchema, insertTeamSchema, insertMatchSchema } from "@shared/schema";
+import { insertTournamentSchema, insertTeamSchema, insertMatchSchema, insertPlayerRegistrySchema, insertPlayerDocumentSchema } from "@shared/schema";
 import { z } from "zod";
 import { generateRoundRobinFixtures } from "./lib/fixtureGenerator";
 import { calculateStandings } from "./lib/standingsCalculator";
 import { db } from "./db";
 import { rounds, stages, teams, matches } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import crypto from "crypto";
+
+// Helper function to hash identity keys
+function hashIdentityKey(orgId: string, docType: string, docNumber: string): string {
+  const salt = process.env.SESSION_SECRET || "default-salt";
+  return crypto
+    .createHmac("sha256", salt)
+    .update(`${orgId}:${docType}:${docNumber}`)
+    .digest("hex");
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Reference Data
@@ -51,6 +61,142 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const wards = await storage.getWardsBySubCounty(req.params.subCountyId);
       res.json(wards);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Players
+  app.get("/api/players", async (req, res) => {
+    try {
+      const orgId = req.query.orgId as string;
+      if (!orgId) {
+        return res.status(400).json({ error: "orgId is required" });
+      }
+      const players = await storage.getPlayersByOrg(orgId);
+      res.json(players);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/players/search", async (req, res) => {
+    try {
+      const orgId = req.query.orgId as string;
+      const query = req.query.q as string;
+      if (!orgId || !query) {
+        return res.status(400).json({ error: "orgId and q are required" });
+      }
+      const players = await storage.searchPlayers(orgId, query);
+      res.json(players);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/players/:id", async (req, res) => {
+    try {
+      const player = await storage.getPlayerById(req.params.id);
+      if (!player) {
+        return res.status(404).json({ error: "Player not found" });
+      }
+      res.json(player);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/players", async (req, res) => {
+    try {
+      const validatedData = insertPlayerRegistrySchema.parse(req.body);
+      
+      // Check for duplicates using hashed identity keys
+      const duplicates = await storage.findDuplicatePlayers(
+        validatedData.orgId,
+        validatedData.hashedIdentityKeys
+      );
+      
+      if (duplicates.length > 0) {
+        return res.status(409).json({ 
+          error: "Duplicate player found",
+          duplicates: duplicates
+        });
+      }
+      
+      const player = await storage.createPlayer(validatedData);
+      res.status(201).json(player);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/players/:id", async (req, res) => {
+    try {
+      const player = await storage.updatePlayer(req.params.id, req.body);
+      if (!player) {
+        return res.status(404).json({ error: "Player not found" });
+      }
+      res.json(player);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Player Documents
+  app.get("/api/players/:upid/documents", async (req, res) => {
+    try {
+      const documents = await storage.getPlayerDocuments(req.params.upid);
+      res.json(documents);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/players/:upid/documents", async (req, res) => {
+    try {
+      const validatedData = insertPlayerDocumentSchema.parse({
+        ...req.body,
+        upid: req.params.upid
+      });
+      
+      // Hash the document number for uniqueness check
+      if (req.body.docNumber) {
+        validatedData.docNumberHash = hashIdentityKey(
+          req.body.orgId,
+          validatedData.docType,
+          req.body.docNumber
+        );
+      }
+      
+      const document = await storage.createPlayerDocument(validatedData);
+      res.status(201).json(document);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/player-documents/:id", async (req, res) => {
+    try {
+      const document = await storage.updatePlayerDocument(req.params.id, req.body);
+      if (!document) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+      res.json(document);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/player-documents/:id", async (req, res) => {
+    try {
+      await storage.deletePlayerDocument(req.params.id);
+      res.status(204).send();
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
