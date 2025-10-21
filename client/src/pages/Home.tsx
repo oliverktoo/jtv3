@@ -3,51 +3,32 @@ import StatsPanel from "@/components/StatsPanel";
 import TournamentCard from "@/components/TournamentCard";
 import CreateTournamentDialog from "@/components/CreateTournamentDialog";
 import { Button } from "@/components/ui/button";
+import { useTournaments } from "@/hooks/useTournaments";
+import { useOrganizations } from "@/hooks/useReferenceData";
+import { Link } from "wouter";
 
 export default function Home() {
+  const { data: organizations } = useOrganizations();
+  const orgId = organizations?.[0]?.id || "";
+  const { data: tournaments, isLoading } = useTournaments(orgId);
+
+  const activeTournaments = tournaments?.filter((t) => t.status === "ACTIVE") || [];
+  const recentTournaments = tournaments?.slice(0, 3) || [];
+
   const stats = [
-    { label: "Active Tournaments", value: "12", icon: Trophy, color: "bg-chart-1/10" },
-    { label: "Upcoming Fixtures", value: "48", icon: Calendar, color: "bg-chart-2/10" },
+    { label: "Active Tournaments", value: activeTournaments.length.toString(), icon: Trophy, color: "bg-chart-1/10" },
+    { label: "Total Tournaments", value: tournaments?.length.toString() || "0", icon: Calendar, color: "bg-chart-2/10" },
     { label: "Registered Teams", value: "156", icon: Users, color: "bg-chart-3/10" },
     { label: "Matches Played", value: "234", icon: Target, color: "bg-chart-4/10" },
   ];
 
-  const recentTournaments = [
-    {
-      id: "1",
-      name: "Nairobi County Football Championship",
-      model: "ADMINISTRATIVE_COUNTY" as const,
-      status: "ACTIVE" as const,
-      season: "2025/26",
-      startDate: "2025-10-11",
-      endDate: "2026-07-26",
-      teamCount: 16,
-      location: "Nairobi County",
-      sport: "Football",
-    },
-    {
-      id: "2",
-      name: "Upper Rift Regional League Zone A",
-      model: "LEAGUE" as const,
-      status: "REGISTRATION" as const,
-      season: "2025",
-      startDate: "2025-11-01",
-      endDate: "2026-05-30",
-      teamCount: 12,
-      location: "Rift Valley",
-      sport: "Basketball",
-    },
-    {
-      id: "3",
-      name: "Westlands Ward Youth Tournament",
-      model: "ADMINISTRATIVE_WARD" as const,
-      status: "DRAFT" as const,
-      season: "2025",
-      startDate: "2025-12-01",
-      endDate: "2025-12-15",
-      sport: "Volleyball",
-    },
-  ];
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -66,21 +47,37 @@ export default function Home() {
       <div>
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-semibold">Recent Tournaments</h2>
-          <Button variant="outline" data-testid="button-view-all">
-            View All
-          </Button>
+          <Link href="/tournaments">
+            <Button variant="outline" data-testid="button-view-all">
+              View All
+            </Button>
+          </Link>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {recentTournaments.map((tournament) => (
-            <TournamentCard
-              key={tournament.id}
-              {...tournament}
-              onView={() => console.log("View", tournament.id)}
-              onEdit={() => console.log("Edit", tournament.id)}
-              onDelete={() => console.log("Delete", tournament.id)}
-            />
-          ))}
-        </div>
+        {recentTournaments.length === 0 ? (
+          <div className="text-center py-12 border-2 border-dashed rounded-lg">
+            <p className="text-muted-foreground mb-4">No tournaments yet</p>
+            <CreateTournamentDialog trigger={<Button>Create Your First Tournament</Button>} />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {recentTournaments.map((tournament) => (
+              <TournamentCard
+                key={tournament.id}
+                id={tournament.id}
+                name={tournament.name}
+                model={tournament.tournamentModel}
+                status={tournament.status}
+                season={tournament.season}
+                startDate={tournament.startDate}
+                endDate={tournament.endDate}
+                sport="Football"
+                onView={() => console.log("View", tournament.id)}
+                onEdit={() => console.log("Edit", tournament.id)}
+                onDelete={() => console.log("Delete", tournament.id)}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

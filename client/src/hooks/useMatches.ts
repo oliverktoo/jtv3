@@ -33,12 +33,13 @@ export function useGenerateFixtures(tournamentId: string) {
   });
 }
 
-export function useUpdateMatch() {
+export function useUpdateMatch(tournamentId: string) {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<Match> }) =>
       apiRequest("PATCH", `/api/matches/${id}`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tournaments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tournaments", tournamentId, "matches"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tournaments", tournamentId, "standings"] });
     },
   });
 }

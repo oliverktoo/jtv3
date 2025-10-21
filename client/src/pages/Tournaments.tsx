@@ -10,73 +10,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useTournaments, useDeleteTournament } from "@/hooks/useTournaments";
+import { useOrganizations } from "@/hooks/useReferenceData";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Tournaments() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const { toast } = useToast();
 
-  const tournaments = [
-    {
-      id: "1",
-      name: "Nairobi County Football Championship",
-      model: "ADMINISTRATIVE_COUNTY" as const,
-      status: "ACTIVE" as const,
-      season: "2025/26",
-      startDate: "2025-10-11",
-      endDate: "2026-07-26",
-      teamCount: 16,
-      location: "Nairobi County",
-      sport: "Football",
-    },
-    {
-      id: "2",
-      name: "Upper Rift Regional League Zone A",
-      model: "LEAGUE" as const,
-      status: "REGISTRATION" as const,
-      season: "2025",
-      startDate: "2025-11-01",
-      endDate: "2026-05-30",
-      teamCount: 12,
-      location: "Rift Valley",
-      sport: "Basketball",
-    },
-    {
-      id: "3",
-      name: "Westlands Ward Youth Tournament",
-      model: "ADMINISTRATIVE_WARD" as const,
-      status: "DRAFT" as const,
-      season: "2025",
-      startDate: "2025-12-01",
-      endDate: "2025-12-15",
-      sport: "Volleyball",
-    },
-    {
-      id: "4",
-      name: "Inter-County Basketball Derby",
-      model: "INTER_COUNTY" as const,
-      status: "ACTIVE" as const,
-      season: "2025",
-      startDate: "2025-10-01",
-      endDate: "2025-12-20",
-      teamCount: 8,
-      location: "Multiple Counties",
-      sport: "Basketball",
-    },
-    {
-      id: "5",
-      name: "National Schools Championship",
-      model: "ADMINISTRATIVE_NATIONAL" as const,
-      status: "COMPLETED" as const,
-      season: "2024/25",
-      startDate: "2024-09-01",
-      endDate: "2025-06-30",
-      teamCount: 32,
-      location: "National",
-      sport: "Rugby",
-    },
-  ];
+  const { data: organizations } = useOrganizations();
+  const orgId = organizations?.[0]?.id || "";
+  const { data: tournaments, isLoading } = useTournaments(orgId);
+  const deleteTournament = useDeleteTournament();
 
-  const filteredTournaments = tournaments.filter((tournament) => {
+  const filteredTournaments = (tournaments || []).filter((tournament) => {
     const matchesSearch = tournament.name
       .toLowerCase()
       .includes(searchQuery.toLowerCase());
@@ -84,6 +32,32 @@ export default function Tournaments() {
       statusFilter === "all" || tournament.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  const handleDelete = async (id: string, name: string) => {
+    if (confirm(`Are you sure you want to delete "${name}"?`)) {
+      try {
+        await deleteTournament.mutateAsync({ id, orgId });
+        toast({
+          title: "Tournament deleted",
+          description: `${name} has been deleted successfully.`,
+        });
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to delete tournament.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-muted-foreground">Loading tournaments...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -132,10 +106,17 @@ export default function Tournaments() {
           {filteredTournaments.map((tournament) => (
             <TournamentCard
               key={tournament.id}
-              {...tournament}
+              id={tournament.id}
+              name={tournament.name}
+              model={tournament.tournamentModel}
+              status={tournament.status}
+              season={tournament.season}
+              startDate={tournament.startDate}
+              endDate={tournament.endDate}
+              sport="Football"
               onView={() => console.log("View", tournament.id)}
               onEdit={() => console.log("Edit", tournament.id)}
-              onDelete={() => console.log("Delete", tournament.id)}
+              onDelete={() => handleDelete(tournament.id, tournament.name)}
             />
           ))}
         </div>

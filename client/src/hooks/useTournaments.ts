@@ -41,9 +41,10 @@ export function useUpdateTournament() {
 
 export function useDeleteTournament() {
   return useMutation({
-    mutationFn: (id: string) => apiRequest("DELETE", `/api/tournaments/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tournaments"] });
+    mutationFn: ({ id, orgId }: { id: string; orgId: string }) => 
+      apiRequest("DELETE", `/api/tournaments/${id}`),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tournaments", variables.orgId] });
     },
   });
 }
