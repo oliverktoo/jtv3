@@ -95,6 +95,20 @@ export const contractTypeEnum = pgEnum("contract_type_enum", [
   "SHORT_TERM",
 ]);
 
+export const transferStatusEnum = pgEnum("transfer_status_enum", [
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+  "COMPLETED",
+  "CANCELLED",
+]);
+
+export const transferTypeEnum = pgEnum("transfer_type_enum", [
+  "PERMANENT",
+  "LOAN",
+  "LOAN_RETURN",
+]);
+
 // Core Tables
 export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -201,6 +215,23 @@ export const contracts = pgTable("contracts", {
   status: contractStatusEnum("status").notNull().default("PENDING"),
   startDate: date("start_date").notNull(),
   endDate: date("end_date"),
+  terms: jsonb("terms"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const transfers = pgTable("transfers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  upid: uuid("upid").notNull().references(() => playerRegistry.id),
+  fromTeamId: uuid("from_team_id").references(() => teams.id, { onDelete: "set null" }),
+  toTeamId: uuid("to_team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
+  orgId: uuid("org_id").notNull().references(() => organizations.id),
+  transferType: transferTypeEnum("transfer_type").notNull(),
+  status: transferStatusEnum("status").notNull().default("PENDING"),
+  requestDate: date("request_date").notNull(),
+  effectiveDate: date("effective_date"),
+  expiryDate: date("expiry_date"),
   terms: jsonb("terms"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -424,6 +455,22 @@ export const updateContractSchema = createInsertSchema(contracts).omit({
   updatedAt: true,
 }).partial();
 
+export const insertTransferSchema = createInsertSchema(transfers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateTransferSchema = createInsertSchema(transfers).omit({
+  id: true,
+  upid: true,
+  fromTeamId: true,
+  toTeamId: true,
+  orgId: true,
+  createdAt: true,
+  updatedAt: true,
+}).partial();
+
 // Types
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type Organization = typeof organizations.$inferSelect;
@@ -474,3 +521,7 @@ export type EligibilityRule = typeof eligibilityRules.$inferSelect;
 export type InsertContract = z.infer<typeof insertContractSchema>;
 export type UpdateContract = z.infer<typeof updateContractSchema>;
 export type Contract = typeof contracts.$inferSelect;
+
+export type InsertTransfer = z.infer<typeof insertTransferSchema>;
+export type UpdateTransfer = z.infer<typeof updateTransferSchema>;
+export type Transfer = typeof transfers.$inferSelect;
