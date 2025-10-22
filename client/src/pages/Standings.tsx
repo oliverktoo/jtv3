@@ -1,197 +1,67 @@
+import { useState, useEffect } from "react";
 import StandingsTable from "@/components/StandingsTable";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useOrganizations } from "@/hooks/useReferenceData";
+import { useTournaments } from "@/hooks/useTournaments";
+import { useStandings } from "@/hooks/useMatches";
 
 export default function Standings() {
-  const standings = [
-    {
-      position: 1,
-      team: "Tusker FC",
-      played: 10,
-      won: 7,
-      drawn: 2,
-      lost: 1,
-      goalsFor: 21,
-      goalsAgainst: 8,
-      goalDifference: 13,
-      points: 23,
-      form: ["W", "W", "D", "W", "W"],
-      zone: "promotion" as const,
-    },
-    {
-      position: 2,
-      team: "Gor Mahia",
-      played: 10,
-      won: 7,
-      drawn: 1,
-      lost: 2,
-      goalsFor: 19,
-      goalsAgainst: 10,
-      goalDifference: 9,
-      points: 22,
-      form: ["W", "L", "W", "W", "D"],
-      zone: "promotion" as const,
-    },
-    {
-      position: 3,
-      team: "AFC Leopards",
-      played: 10,
-      won: 6,
-      drawn: 2,
-      lost: 2,
-      goalsFor: 17,
-      goalsAgainst: 11,
-      goalDifference: 6,
-      points: 20,
-      form: ["W", "D", "W", "L", "W"],
-    },
-    {
-      position: 4,
-      team: "KCB FC",
-      played: 10,
-      won: 5,
-      drawn: 3,
-      lost: 2,
-      goalsFor: 15,
-      goalsAgainst: 10,
-      goalDifference: 5,
-      points: 18,
-      form: ["D", "W", "W", "D", "L"],
-    },
-    {
-      position: 5,
-      team: "Ulinzi Stars",
-      played: 10,
-      won: 4,
-      drawn: 4,
-      lost: 2,
-      goalsFor: 14,
-      goalsAgainst: 11,
-      goalDifference: 3,
-      points: 16,
-      form: ["D", "W", "D", "W", "D"],
-    },
-    {
-      position: 6,
-      team: "Bandari FC",
-      played: 10,
-      won: 4,
-      drawn: 3,
-      lost: 3,
-      goalsFor: 13,
-      goalsAgainst: 12,
-      goalDifference: 1,
-      points: 15,
-      form: ["W", "L", "D", "W", "D"],
-    },
-    {
-      position: 7,
-      team: "Kakamega Homeboyz",
-      played: 10,
-      won: 4,
-      drawn: 2,
-      lost: 4,
-      goalsFor: 12,
-      goalsAgainst: 13,
-      goalDifference: -1,
-      points: 14,
-      form: ["L", "W", "L", "D", "W"],
-    },
-    {
-      position: 8,
-      team: "Sofapaka",
-      played: 10,
-      won: 3,
-      drawn: 4,
-      lost: 3,
-      goalsFor: 11,
-      goalsAgainst: 12,
-      goalDifference: -1,
-      points: 13,
-      form: ["D", "L", "D", "W", "D"],
-    },
-    {
-      position: 9,
-      team: "Posta Rangers",
-      played: 10,
-      won: 3,
-      drawn: 3,
-      lost: 4,
-      goalsFor: 10,
-      goalsAgainst: 13,
-      goalDifference: -3,
-      points: 12,
-      form: ["L", "D", "W", "L", "D"],
-    },
-    {
-      position: 10,
-      team: "Nzoia Sugar",
-      played: 10,
-      won: 2,
-      drawn: 4,
-      lost: 4,
-      goalsFor: 9,
-      goalsAgainst: 14,
-      goalDifference: -5,
-      points: 10,
-      form: ["D", "L", "L", "D", "W"],
-    },
-    {
-      position: 11,
-      team: "Kariobangi Sharks",
-      played: 10,
-      won: 2,
-      drawn: 3,
-      lost: 5,
-      goalsFor: 8,
-      goalsAgainst: 15,
-      goalDifference: -7,
-      points: 9,
-      form: ["L", "D", "L", "W", "L"],
-    },
-    {
-      position: 12,
-      team: "Mathare United",
-      played: 10,
-      won: 2,
-      drawn: 2,
-      lost: 6,
-      goalsFor: 7,
-      goalsAgainst: 16,
-      goalDifference: -9,
-      points: 8,
-      form: ["L", "L", "D", "L", "W"],
-    },
-    {
-      position: 13,
-      team: "Vihiga Bullets",
-      played: 10,
-      won: 1,
-      drawn: 3,
-      lost: 6,
-      goalsFor: 6,
-      goalsAgainst: 18,
-      goalDifference: -12,
-      points: 6,
-      form: ["L", "D", "L", "L", "D"],
-      zone: "relegation" as const,
-    },
-    {
-      position: 14,
-      team: "Wazito FC",
-      played: 10,
-      won: 1,
-      drawn: 2,
-      lost: 7,
-      goalsFor: 5,
-      goalsAgainst: 19,
-      goalDifference: -14,
-      points: 5,
-      form: ["L", "L", "D", "L", "L"],
-      zone: "relegation" as const,
-    },
-  ];
+  const [selectedOrgId, setSelectedOrgId] = useState("");
+  const [selectedTournamentId, setSelectedTournamentId] = useState("");
+
+  const { data: organizations } = useOrganizations();
+  const { data: tournaments } = useTournaments(selectedOrgId);
+  const { data: standingsData = [], isLoading } = useStandings(selectedTournamentId);
+
+  // Initialize selectedOrgId when organizations load
+  useEffect(() => {
+    if (organizations && organizations.length > 0 && !selectedOrgId) {
+      setSelectedOrgId(organizations[0].id);
+    }
+  }, [organizations, selectedOrgId]);
+
+  // Initialize selectedTournamentId when tournaments load
+  useEffect(() => {
+    if (tournaments && tournaments.length > 0 && !selectedTournamentId) {
+      const activeTournament = tournaments.find((t) => t.status === "ACTIVE") || tournaments[0];
+      setSelectedTournamentId(activeTournament.id);
+    }
+  }, [tournaments, selectedTournamentId]);
+
+  const selectedTournament = tournaments?.find((t) => t.id === selectedTournamentId);
+
+  // Transform API standings data to component format
+  const standings = standingsData.map((s: any, index: number) => ({
+    position: s.position || index + 1,
+    team: s.teamName || s.team || "Unknown Team",
+    played: s.played || 0,
+    won: s.won || 0,
+    drawn: s.drawn || 0,
+    lost: s.lost || 0,
+    goalsFor: s.goalsFor || 0,
+    goalsAgainst: s.goalsAgainst || 0,
+    goalDifference: s.goalDifference || 0,
+    points: s.points || 0,
+    form: s.form || [],
+    zone: s.zone,
+  }));
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-muted-foreground">Loading standings...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -208,30 +78,77 @@ export default function Standings() {
         </Button>
       </div>
 
-      <div>
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold">Division 1 - 2025/26 Season</h2>
-          <div className="flex gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-chart-2/30 border border-chart-2/50"></div>
-              <span className="text-muted-foreground">Promotion Zone</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-destructive/30 border border-destructive/50"></div>
-              <span className="text-muted-foreground">Relegation Zone</span>
-            </div>
-          </div>
+      <div className="flex gap-4 items-center flex-wrap">
+        <Select value={selectedOrgId} onValueChange={setSelectedOrgId}>
+          <SelectTrigger className="w-[220px]" data-testid="select-organization">
+            <SelectValue placeholder="Select organization" />
+          </SelectTrigger>
+          <SelectContent>
+            {organizations?.map((org) => (
+              <SelectItem key={org.id} value={org.id}>
+                {org.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={selectedTournamentId} onValueChange={setSelectedTournamentId}>
+          <SelectTrigger className="w-[220px]" data-testid="select-tournament">
+            <SelectValue placeholder="Select tournament" />
+          </SelectTrigger>
+          <SelectContent>
+            {tournaments?.map((tournament) => (
+              <SelectItem key={tournament.id} value={tournament.id}>
+                {tournament.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {!selectedTournamentId && (
+        <div className="text-center py-12 border-2 border-dashed rounded-lg">
+          <p className="text-muted-foreground">Select a tournament to view standings</p>
         </div>
+      )}
 
-        <StandingsTable standings={standings} showForm />
-
-        <div className="mt-6 p-4 bg-muted/30 rounded-lg">
+      {selectedTournamentId && standings.length === 0 && (
+        <div className="text-center py-12 border-2 border-dashed rounded-lg">
+          <p className="text-muted-foreground mb-2">No standings available</p>
           <p className="text-sm text-muted-foreground">
-            <span className="font-semibold">Tiebreaker Order:</span> Points &gt;
-            Goal Difference &gt; Goals For &gt; Head-to-Head
+            Standings will be calculated once matches are completed
           </p>
         </div>
-      </div>
+      )}
+
+      {selectedTournamentId && standings.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold">
+              {selectedTournament?.name || "Tournament Standings"}
+            </h2>
+            <div className="flex gap-4 text-sm">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-chart-2/30 border border-chart-2/50"></div>
+                <span className="text-muted-foreground">Promotion Zone</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-destructive/30 border border-destructive/50"></div>
+                <span className="text-muted-foreground">Relegation Zone</span>
+              </div>
+            </div>
+          </div>
+
+          <StandingsTable standings={standings} showForm />
+
+          <div className="mt-6 p-4 bg-muted/30 rounded-lg">
+            <p className="text-sm text-muted-foreground">
+              <span className="font-semibold">Tiebreaker Order:</span> Points &gt;
+              Goal Difference &gt; Goals For &gt; Head-to-Head
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

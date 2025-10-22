@@ -5,6 +5,7 @@ import CreateTournamentDialog from "@/components/CreateTournamentDialog";
 import { Button } from "@/components/ui/button";
 import { useTournaments } from "@/hooks/useTournaments";
 import { useOrganizations } from "@/hooks/useReferenceData";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 
 export default function Home() {
@@ -12,6 +13,17 @@ export default function Home() {
   const orgId = organizations?.[0]?.id || "";
   const { data: tournaments, isLoading } = useTournaments(orgId);
   const [, setLocation] = useLocation();
+
+  // Fetch stats for all tournaments
+  const { data: orgStats } = useQuery<any>({
+    queryKey: ["/api/organizations", orgId, "stats"],
+    queryFn: async () => {
+      const response = await fetch(`/api/organizations/${orgId}/stats`);
+      if (!response.ok) return { totalTeams: 0, completedMatches: 0 };
+      return response.json();
+    },
+    enabled: !!orgId,
+  });
 
   if (isLoading || !tournaments) {
     return (
@@ -27,8 +39,8 @@ export default function Home() {
   const stats = [
     { label: "Active Tournaments", value: activeTournaments.length.toString(), icon: Trophy, color: "bg-chart-1/10" },
     { label: "Total Tournaments", value: tournaments.length.toString(), icon: Calendar, color: "bg-chart-2/10" },
-    { label: "Registered Teams", value: "156", icon: Users, color: "bg-chart-3/10" },
-    { label: "Matches Played", value: "234", icon: Target, color: "bg-chart-4/10" },
+    { label: "Registered Teams", value: (orgStats?.totalTeams || 0).toString(), icon: Users, color: "bg-chart-3/10" },
+    { label: "Matches Played", value: (orgStats?.completedMatches || 0).toString(), icon: Target, color: "bg-chart-4/10" },
   ];
 
   return (

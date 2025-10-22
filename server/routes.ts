@@ -6,7 +6,7 @@ import { z } from "zod";
 import { generateRoundRobinFixtures } from "./lib/fixtureGenerator";
 import { calculateStandings } from "./lib/standingsCalculator";
 import { db } from "./db";
-import { rounds, stages, teams, matches } from "@shared/schema";
+import { rounds, stages, teams, matches, tournaments } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import crypto from "crypto";
 
@@ -25,6 +25,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const organizations = await storage.getOrganizations();
       res.json(organizations);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/organizations/:orgId/stats", async (req, res) => {
+    try {
+      const orgId = req.params.orgId;
+      const { inArray } = await import("drizzle-orm");
+      
+      // Get all tournament IDs for the organization
+      const orgTournaments = await db
+        .select({ id: tournaments.id })
+        .from(tournaments)
+        .where(eq(tournaments.orgId, orgId));
+      
+      const tournamentIds = orgTournaments.map(t => t.id);
+      
+      let totalTeams = 0;
+      let completedMatches = 0;
+      
+      if (tournamentIds.length > 0) {
+        // Count teams directly with WHERE clause
+        const orgTeams = await db
+          .select()
+          .from(teams)
+          .where(inArray(teams.tournamentId, tournamentIds));
+        totalTeams = orgTeams.length;
+        
+        // Get stage IDs for org tournaments
+        const orgStages = await db
+          .select({ id: stages.id })
+          .from(stages)
+          .where(inArray(stages.tournamentId, tournamentIds));
+        
+        const stageIds = orgStages.map(s => s.id);
+        
+        if (stageIds.length > 0) {
+          // Get round IDs for org stages
+          const orgRounds = await db
+            .select({ id: rounds.id })
+            .from(rounds)
+            .where(inArray(rounds.stageId, stageIds));
+          
+          const roundIds = orgRounds.map(r => r.id);
+          
+          if (roundIds.length > 0) {
+            // Count completed matches directly with WHERE clauses
+            const { and } = await import("drizzle-orm");
+            const completed = await db
+              .select()
+              .from(matches)
+              .where(
+                and(
+                  inArray(matches.roundId, roundIds),
+                  eq(matches.status, 'COMPLETED')
+                )
+              );
+            completedMatches = completed.length;
+          }
+        }
+      }
+      
+      res.json({
+        totalTeams,
+        completedMatches,
+      });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
