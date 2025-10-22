@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Plus, User, FileText, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, Plus, User, FileText, ChevronDown, ChevronUp, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 import { usePlayers, useCreatePlayer } from "@/hooks/usePlayers";
 import { useOrganizations } from "@/hooks/useReferenceData";
 import { useToast } from "@/hooks/use-toast";
-import { insertPlayerRegistrySchema, type Contract } from "@shared/schema";
+import { insertPlayerRegistrySchema, type Contract, type Transfer } from "@shared/schema";
 import { format } from "date-fns";
 
 const createPlayerFormSchema = insertPlayerRegistrySchema.extend({
@@ -102,6 +102,104 @@ function PlayerContracts({ upid }: { upid: string }) {
                       Period: {format(new Date(contract.startDate), "MMM d, yyyy")} -{" "}
                       {contract.endDate ? format(new Date(contract.endDate), "MMM d, yyyy") : "Open-ended"}
                     </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function PlayerTransfers({ upid }: { upid: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  const { data: transfers, isLoading } = useQuery<Transfer[]>({
+    queryKey: ["/api/transfers", "player", upid],
+    queryFn: async () => {
+      const res = await fetch(`/api/players/${upid}/transfers`);
+      if (!res.ok) throw new Error("Failed to fetch player transfers");
+      return res.json();
+    },
+    enabled: isOpen,
+  });
+
+  const { data: teams } = useQuery({
+    queryKey: ["/api/teams"],
+    queryFn: async () => {
+      const res = await fetch("/api/teams");
+      if (!res.ok) throw new Error("Failed to fetch teams");
+      return res.json();
+    },
+    enabled: isOpen && !!transfers,
+  });
+
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status) {
+      case "APPROVED":
+      case "COMPLETED":
+        return "default";
+      case "PENDING":
+        return "secondary";
+      case "REJECTED":
+      case "CANCELLED":
+        return "outline";
+      default:
+        return "secondary";
+    }
+  };
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-between"
+          data-testid={`button-view-transfers-${upid}`}
+        >
+          <span>Transfer History</span>
+          {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-3">
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground text-center py-2">Loading transfers...</p>
+        ) : !transfers || transfers.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-2">No transfers found</p>
+        ) : (
+          <div className="space-y-2">
+            {transfers.map((transfer) => {
+              const fromTeam = teams?.find((t: any) => t.id === transfer.fromTeamId);
+              const toTeam = teams?.find((t: any) => t.id === transfer.toTeamId);
+              return (
+                <div
+                  key={transfer.id}
+                  className="border rounded-md p-3 text-sm"
+                  data-testid={`transfer-item-${transfer.id}`}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="font-medium">{fromTeam?.name || "Free Agent"}</span>
+                      <ArrowRight className="w-3 h-3" />
+                      <span className="font-medium">{toTeam?.name || "Unknown Team"}</span>
+                    </div>
+                    <Badge variant={getStatusBadgeVariant(transfer.status)} className="text-xs">
+                      {transfer.status}
+                    </Badge>
+                  </div>
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    <div>Type: {transfer.transferType.replace("_", " ")}</div>
+                    <div>
+                      Requested: {format(new Date(transfer.requestDate), "MMM d, yyyy")}
+                    </div>
+                    {transfer.effectiveDate && (
+                      <div>
+                        Effective: {format(new Date(transfer.effectiveDate), "MMM d, yyyy")}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -397,8 +495,9 @@ export default function Players() {
                     Registered {format(new Date(player.createdAt), "MMM d, yyyy")}
                   </div>
                 </div>
-                <div className="border-t mt-4 pt-4">
+                <div className="border-t mt-4 pt-4 space-y-2">
                   <PlayerContracts upid={player.id} />
+                  <PlayerTransfers upid={player.id} />
                 </div>
               </CardContent>
             </Card>
