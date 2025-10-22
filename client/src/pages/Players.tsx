@@ -29,7 +29,12 @@ function PlayerContracts({ upid }: { upid: string }) {
   const [isOpen, setIsOpen] = useState(false);
   
   const { data: contracts, isLoading } = useQuery<Contract[]>({
-    queryKey: ["/api/players", upid, "contracts"],
+    queryKey: ["/api/contracts", "player", upid],
+    queryFn: async () => {
+      const res = await fetch(`/api/contracts?upid=${upid}`);
+      if (!res.ok) throw new Error("Failed to fetch player contracts");
+      return res.json();
+    },
     enabled: isOpen,
   });
 

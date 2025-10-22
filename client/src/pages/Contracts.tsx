@@ -27,7 +27,7 @@ type CreateContractFormValues = z.infer<typeof createContractFormSchema>;
 
 function useContracts(orgId: string) {
   return useQuery<Contract[]>({
-    queryKey: ["/api/organizations", orgId, "contracts"],
+    queryKey: ["/api/contracts", orgId],
     enabled: !!orgId,
   });
 }
@@ -38,9 +38,7 @@ function useCreateContract() {
       return apiRequest("POST", "/api/contracts", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/organizations"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/players"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contracts"] });
     },
   });
 }
@@ -51,9 +49,7 @@ function useUpdateContract() {
       return apiRequest("PATCH", `/api/contracts/${id}`, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/organizations"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/players"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contracts"] });
     },
   });
 }
@@ -64,9 +60,7 @@ function useDeleteContract() {
       return apiRequest("DELETE", `/api/contracts/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/organizations"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/players"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contracts"] });
     },
   });
 }
