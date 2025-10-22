@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, Plus, ArrowRight, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,8 +42,10 @@ function useCreateTransfer() {
     mutationFn: async (data: CreateTransferFormValues) => {
       return apiRequest("POST", "/api/transfers", data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/organizations"] });
+    onSuccess: (_result, variables) => {
+      // Invalidate based on the orgId from the mutation data
+      queryClient.invalidateQueries({ queryKey: ["/api/organizations", variables.orgId, "transfers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/transfers"] });
     },
   });
 }
@@ -53,8 +55,12 @@ function useUpdateTransfer() {
     mutationFn: async ({ id, data }: { id: string; data: Partial<Transfer> }) => {
       return apiRequest("PATCH", `/api/transfers/${id}`, data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/organizations"] });
+    onSuccess: (_result, variables) => {
+      // Invalidate based on the orgId from the mutation data
+      if (variables.data.orgId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/organizations", variables.data.orgId, "transfers"] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/transfers"] });
     },
   });
 }
@@ -87,6 +93,13 @@ export default function Transfers() {
   const createTransfer = useCreateTransfer();
   const updateTransfer = useUpdateTransfer();
 
+  // Initialize selectedOrgId when organizations load
+  useEffect(() => {
+    if (organizations && organizations.length > 0 && !selectedOrgId) {
+      setSelectedOrgId(organizations[0].id);
+    }
+  }, [organizations, selectedOrgId]);
+
   const form = useForm<CreateTransferFormValues>({
     resolver: zodResolver(createTransferFormSchema),
     defaultValues: {
@@ -102,6 +115,13 @@ export default function Transfers() {
       notes: "",
     },
   });
+
+  // Update form's orgId when selectedOrgId changes
+  useEffect(() => {
+    if (selectedOrgId) {
+      form.setValue("orgId", selectedOrgId);
+    }
+  }, [selectedOrgId, form]);
 
   const handleCreateTransfer = async (data: CreateTransferFormValues) => {
     try {
@@ -121,11 +141,11 @@ export default function Transfers() {
     }
   };
 
-  const handleStatusUpdate = async (transferId: string, newStatus: string) => {
+  const handleStatusUpdate = async (transferId: string, newStatus: string, orgId: string) => {
     try {
       await updateTransfer.mutateAsync({
         id: transferId,
-        data: { status: newStatus as any },
+        data: { status: newStatus as any, orgId },
       });
       toast({
         title: "Transfer updated",
@@ -452,7 +472,7 @@ export default function Transfers() {
                       </Badge>
                       <Select
                         value={transfer.status}
-                        onValueChange={(value) => handleStatusUpdate(transfer.id, value)}
+                        onValueChange={(value) => handleStatusUpdate(transfer.id, value, transfer.orgId)}
                       >
                         <SelectTrigger className="w-32 h-8" data-testid={`select-update-status-${transfer.id}`}>
                           <SelectValue />
