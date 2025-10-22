@@ -20,6 +20,7 @@ import Disciplinary from "@/pages/Disciplinary";
 import Documents from "@/pages/Documents";
 import Eligibility from "@/pages/Eligibility";
 import Teams from "@/pages/Teams";
+import Reports from "@/pages/Reports";
 
 function Router() {
   return (
@@ -37,6 +38,7 @@ function Router() {
       <Route path="/teams/:teamId/roster" component={TeamRoster} />
       <Route path="/fixtures" component={Fixtures} />
       <Route path="/standings" component={Standings} />
+      <Route path="/reports" component={Reports} />
       <Route component={NotFound} />
     </Switch>
   );

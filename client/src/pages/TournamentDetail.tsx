@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Calendar, MapPin, Trophy, Users, Plus, Pencil, Trash2 } from "lucide-react";
+import GenerateFixturesDialog from "@/components/GenerateFixturesDialog";
 import { format } from "date-fns";
 import type { Tournament, EligibilityRule } from "@shared/schema";
 import { useState } from "react";
@@ -317,6 +318,22 @@ export default function TournamentDetail() {
         <Badge className={statusColors[tournament.status]} variant="outline" data-testid="badge-status">
           {tournament.status}
         </Badge>
+      </div>
+
+      <div className="flex gap-3 flex-wrap">
+        <GenerateFixturesDialog tournamentId={tournament.id} />
+        <Link href={`/fixtures?tournamentId=${tournament.id}`}>
+          <Button variant="outline" data-testid="button-view-fixtures">
+            <Calendar className="h-4 w-4 mr-2" />
+            View Fixtures
+          </Button>
+        </Link>
+        <Link href={`/teams?tournamentId=${tournament.id}`}>
+          <Button variant="outline" data-testid="button-manage-teams">
+            <Users className="h-4 w-4 mr-2" />
+            Manage Teams
+          </Button>
+        </Link>
       </div>
 
       <Card>

@@ -19,6 +19,9 @@ import {
 } from "@/components/ui/select";
 import { Plus } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { useCreateTournament } from "@/hooks/useTournaments";
+import { useOrganizations, useSports } from "@/hooks/useReferenceData";
+import { useToast } from "@/hooks/use-toast";
 
 const tournamentModels = [
   { value: "ADMINISTRATIVE_WARD", label: "Ward Level", description: "Ward-based tournament" },
@@ -32,12 +35,10 @@ const tournamentModels = [
 
 interface CreateTournamentDialogProps {
   trigger?: React.ReactNode;
-  onSubmit?: (data: any) => void;
 }
 
 export default function CreateTournamentDialog({
   trigger,
-  onSubmit,
 }: CreateTournamentDialogProps) {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(1);
@@ -45,23 +46,74 @@ export default function CreateTournamentDialog({
   const [formData, setFormData] = useState({
     name: "",
     season: "",
-    sport: "",
+    sportId: "",
     startDate: "",
     endDate: "",
   });
+
+  const { toast } = useToast();
+  const createTournament = useCreateTournament();
+  const { organizations } = useOrganizations();
+  const { sports } = useSports();
+  
+  const orgId = organizations?.[0]?.id || "";
 
   const handleModelSelect = (model: string) => {
     setSelectedModel(model);
     setStep(2);
   };
 
-  const handleSubmit = () => {
-    console.log("Creating tournament:", { ...formData, model: selectedModel });
-    onSubmit?.({ ...formData, model: selectedModel });
-    setOpen(false);
-    setStep(1);
-    setSelectedModel("");
-    setFormData({ name: "", season: "", sport: "", startDate: "", endDate: "" });
+  const handleSubmit = async () => {
+    if (!orgId) {
+      toast({
+        title: "Error",
+        description: "Organization not found",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.name || !formData.season || !formData.sportId || !formData.startDate || !formData.endDate) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const slug = formData.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+      
+      await createTournament.mutateAsync({
+        orgId,
+        sportId: formData.sportId,
+        name: formData.name,
+        slug,
+        season: formData.season,
+        tournamentModel: selectedModel as any,
+        startDate: formData.startDate,
+        endDate: formData.endDate,
+        status: "DRAFT",
+        isPublished: false,
+      });
+
+      toast({
+        title: "Success",
+        description: `Tournament "${formData.name}" created successfully`,
+      });
+
+      setOpen(false);
+      setStep(1);
+      setSelectedModel("");
+      setFormData({ name: "", season: "", sportId: "", startDate: "", endDate: "" });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create tournament",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -134,20 +186,20 @@ export default function CreateTournamentDialog({
               <div className="space-y-2">
                 <Label htmlFor="sport">Sport</Label>
                 <Select
-                  value={formData.sport}
+                  value={formData.sportId}
                   onValueChange={(value) =>
-                    setFormData({ ...formData, sport: value })
+                    setFormData({ ...formData, sportId: value })
                   }
                 >
                   <SelectTrigger data-testid="select-sport">
                     <SelectValue placeholder="Select sport" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Football">Football</SelectItem>
-                    <SelectItem value="Basketball">Basketball</SelectItem>
-                    <SelectItem value="Volleyball">Volleyball</SelectItem>
-                    <SelectItem value="Rugby">Rugby</SelectItem>
-                    <SelectItem value="Netball">Netball</SelectItem>
+                    {sports.map((sport) => (
+                      <SelectItem key={sport.id} value={sport.id}>
+                        {sport.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -186,11 +238,16 @@ export default function CreateTournamentDialog({
                 variant="outline"
                 onClick={() => setStep(1)}
                 data-testid="button-back"
+                disabled={createTournament.isPending}
               >
                 Back
               </Button>
-              <Button onClick={handleSubmit} data-testid="button-submit">
-                Create Tournament
+              <Button 
+                onClick={handleSubmit} 
+                data-testid="button-submit"
+                disabled={createTournament.isPending}
+              >
+                {createTournament.isPending ? "Creating..." : "Create Tournament"}
               </Button>
             </div>
           </div>

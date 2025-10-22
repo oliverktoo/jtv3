@@ -6,7 +6,7 @@ import { z } from "zod";
 import { generateRoundRobinFixtures } from "./lib/fixtureGenerator";
 import { calculateStandings } from "./lib/standingsCalculator";
 import { db } from "./db";
-import { rounds, stages, teams, matches, tournaments } from "@shared/schema";
+import { rounds, stages, teams, matches, tournaments, playerRegistry, disciplinaryRecords } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import crypto from "crypto";
 
@@ -995,6 +995,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const standings = calculateStandings(tournamentTeams, matches);
 
       res.json(standings);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Reports - Player Statistics
+  app.get("/api/organizations/:orgId/reports/players", async (req, res) => {
+    try {
+      const { orgId } = req.params;
+
+      const players = await db
+        .select()
+        .from(playerRegistry)
+        .where(eq(playerRegistry.orgId, orgId));
+
+      const totalPlayers = players.length;
+      const activeCountPlayers = players.filter((p) => p.status === "ACTIVE").length;
+      const inactivePlayers = totalPlayers - activeCountPlayers;
+
+      const byNationality: Record<string, number> = {};
+      const byStatus: Record<string, number> = {};
+
+      players.forEach((player) => {
+        const nationality = player.nationality || "Unknown";
+        byNationality[nationality] = (byNationality[nationality] || 0) + 1;
+
+        const status = player.status || "Unknown";
+        byStatus[status] = (byStatus[status] || 0) + 1;
+      });
+
+      res.json({
+        totalPlayers,
+        activeCountPlayers,
+        inactivePlayers,
+        byNationality: Object.entries(byNationality).map(([nationality, count]) => ({
+          nationality,
+          count,
+        })),
+        byStatus: Object.entries(byStatus).map(([status, count]) => ({ status, count })),
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Reports - Tournament Statistics
+  app.get("/api/organizations/:orgId/reports/tournaments", async (req, res) => {
+    try {
+      const { orgId } = req.params;
+
+      const tournamentsList = await db
+        .select()
+        .from(tournaments)
+        .where(eq(tournaments.orgId, orgId));
+
+      const totalTournaments = tournamentsList.length;
+
+      const byStatus: Record<string, number> = {};
+      const byModel: Record<string, number> = {};
+
+      tournamentsList.forEach((tournament) => {
+        const status = tournament.status || "Unknown";
+        byStatus[status] = (byStatus[status] || 0) + 1;
+
+        const model = tournament.tournamentModel || "Unknown";
+        byModel[model] = (byModel[model] || 0) + 1;
+      });
+
+      res.json({
+        totalTournaments,
+        byStatus: Object.entries(byStatus).map(([status, count]) => ({ status, count })),
+        byModel: Object.entries(byModel).map(([model, count]) => ({ model, count })),
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Reports - Disciplinary Statistics
+  app.get("/api/organizations/:orgId/reports/disciplinary", async (req, res) => {
+    try {
+      const { orgId } = req.params;
+
+      const records = await db
+        .select()
+        .from(disciplinaryRecords)
+        .where(eq(disciplinaryRecords.orgId, orgId));
+
+      const totalRecords = records.length;
+      const activeRecords = records.filter((r) => r.status === "ACTIVE").length;
+
+      const byType: Record<string, number> = {};
+      const byStatus: Record<string, number> = {};
+
+      records.forEach((record) => {
+        const type = record.incidentType || "Unknown";
+        byType[type] = (byType[type] || 0) + 1;
+
+        const status = record.status || "Unknown";
+        byStatus[status] = (byStatus[status] || 0) + 1;
+      });
+
+      res.json({
+        totalRecords,
+        activeRecords,
+        byType: Object.entries(byType).map(([type, count]) => ({ type, count })),
+        byStatus: Object.entries(byStatus).map(([status, count]) => ({ status, count })),
+      });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
