@@ -53,8 +53,8 @@ export default function CreateTournamentDialog({
 
   const { toast } = useToast();
   const createTournament = useCreateTournament();
-  const { organizations } = useOrganizations();
-  const { sports } = useSports();
+  const { data: organizations } = useOrganizations();
+  const { data: sports } = useSports();
   
   const orgId = organizations?.[0]?.id || "";
 
@@ -195,11 +195,11 @@ export default function CreateTournamentDialog({
                     <SelectValue placeholder="Select sport" />
                   </SelectTrigger>
                   <SelectContent>
-                    {sports.map((sport) => (
+                    {sports?.map((sport: any) => (
                       <SelectItem key={sport.id} value={sport.id}>
                         {sport.name}
                       </SelectItem>
-                    ))}
+                    )) || []}
                   </SelectContent>
                 </Select>
               </div>

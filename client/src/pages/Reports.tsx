@@ -48,7 +48,7 @@ interface DisciplinaryStats {
 }
 
 export default function Reports() {
-  const { organizations } = useOrganizations();
+  const { data: organizations } = useOrganizations();
   const [selectedOrg, setSelectedOrg] = useState<string>("");
   const { toast } = useToast();
 
@@ -70,7 +70,7 @@ export default function Reports() {
   const exportPlayersToExcel = () => {
     if (!playerStats) return;
 
-    const orgName = organizations.find((o) => o.id === selectedOrg)?.name || "Organization";
+    const orgName = organizations?.find((o) => o.id === selectedOrg)?.name || "Organization";
     const timestamp = format(new Date(), "yyyy-MM-dd_HHmm");
 
     const ws = XLSX.utils.json_to_sheet([
@@ -100,7 +100,7 @@ export default function Reports() {
   const exportTournamentsToExcel = () => {
     if (!tournamentStats) return;
 
-    const orgName = organizations.find((o) => o.id === selectedOrg)?.name || "Organization";
+    const orgName = organizations?.find((o) => o.id === selectedOrg)?.name || "Organization";
     const timestamp = format(new Date(), "yyyy-MM-dd_HHmm");
 
     const ws = XLSX.utils.json_to_sheet([
@@ -128,7 +128,7 @@ export default function Reports() {
   const exportDisciplinaryToExcel = () => {
     if (!disciplinaryStats) return;
 
-    const orgName = organizations.find((o) => o.id === selectedOrg)?.name || "Organization";
+    const orgName = organizations?.find((o) => o.id === selectedOrg)?.name || "Organization";
     const timestamp = format(new Date(), "yyyy-MM-dd_HHmm");
 
     const ws = XLSX.utils.json_to_sheet([
@@ -170,11 +170,11 @@ export default function Reports() {
             <SelectValue placeholder="Select organization" />
           </SelectTrigger>
           <SelectContent>
-            {organizations.map((org) => (
+            {organizations?.map((org) => (
               <SelectItem key={org.id} value={org.id}>
                 {org.name}
               </SelectItem>
-            ))}
+            )) || []}
           </SelectContent>
         </Select>
       </div>
