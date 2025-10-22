@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertTournamentSchema, insertTeamSchema, insertMatchSchema, insertPlayerRegistrySchema, insertPlayerDocumentSchema, insertTournamentPlayerSchema, insertRosterMemberSchema } from "@shared/schema";
+import { insertTournamentSchema, insertTeamSchema, insertMatchSchema, insertPlayerRegistrySchema, insertPlayerDocumentSchema, insertTournamentPlayerSchema, insertRosterMemberSchema, insertUserOrganizationRoleSchema } from "@shared/schema";
 import { z } from "zod";
 import { generateRoundRobinFixtures } from "./lib/fixtureGenerator";
 import { calculateStandings } from "./lib/standingsCalculator";
@@ -9,6 +9,7 @@ import { db } from "./db";
 import { rounds, stages, teams, matches, tournaments, playerRegistry, disciplinaryRecords } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import crypto from "crypto";
+import { setupAuth, isAuthenticated, requireSuperAdmin, requireOrgAccess } from "./replitAuth";
 
 // Helper function to hash identity keys
 function hashIdentityKey(orgId: string, docType: string, docNumber: string): string {
@@ -20,8 +21,57 @@ function hashIdentityKey(orgId: string, docType: string, docNumber: string): str
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Setup Authentication
+  await setupAuth(app);
+
+  // Authentication endpoint - returns the current user with roles
+  app.get("/api/auth/user", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const userWithRoles = await storage.getUserWithRoles(user.claims.sub);
+      res.json(userWithRoles);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // User Management (Super Admin only)
+  app.get("/api/users", isAuthenticated, requireSuperAdmin, async (req, res) => {
+    try {
+      const users = await storage.getAllUsersWithRoles();
+      res.json(users);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/users/:userId/roles", isAuthenticated, requireSuperAdmin, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const parsed = insertUserOrganizationRoleSchema.parse(req.body);
+      const role = await storage.assignUserRole({ ...parsed, userId });
+      res.status(201).json(role);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/users/:userId/roles", isAuthenticated, requireSuperAdmin, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { orgId } = req.query;
+      await storage.removeUserRole(userId, orgId as string || null);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Reference Data
-  app.get("/api/organizations", async (req, res) => {
+  app.get("/api/organizations", isAuthenticated, async (req, res) => {
     try {
       const organizations = await storage.getOrganizations();
       res.json(organizations);
@@ -30,7 +80,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/organizations/:orgId/stats", async (req, res) => {
+  app.get("/api/organizations/:orgId/stats", isAuthenticated, requireOrgAccess(["SUPER_ADMIN", "ORG_ADMIN", "VIEWER"]), async (req, res) => {
     try {
       const orgId = req.params.orgId;
       const { inArray } = await import("drizzle-orm");
@@ -97,7 +147,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/sports", async (req, res) => {
+  app.get("/api/sports", isAuthenticated, async (req, res) => {
     try {
       const sports = await storage.getSports();
       res.json(sports);
@@ -106,7 +156,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/counties", async (req, res) => {
+  app.get("/api/counties", isAuthenticated, async (req, res) => {
     try {
       const counties = await storage.getCounties();
       res.json(counties);
@@ -115,7 +165,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/counties/:countyId/sub-counties", async (req, res) => {
+  app.get("/api/counties/:countyId/sub-counties", isAuthenticated, async (req, res) => {
     try {
       const subCounties = await storage.getSubCountiesByCounty(req.params.countyId);
       res.json(subCounties);
@@ -124,7 +174,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/sub-counties/:subCountyId/wards", async (req, res) => {
+  app.get("/api/sub-counties/:subCountyId/wards", isAuthenticated, async (req, res) => {
     try {
       const wards = await storage.getWardsBySubCounty(req.params.subCountyId);
       res.json(wards);

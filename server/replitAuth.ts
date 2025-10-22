@@ -147,3 +147,56 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
     return;
   }
 };
+
+export const requireSuperAdmin: RequestHandler = async (req, res, next) => {
+  try {
+    const user = req.user as any;
+    const userWithRoles = await storage.getUserWithRoles(user.claims.sub);
+    
+    if (!userWithRoles || !userWithRoles.isSuperAdmin) {
+      return res.status(403).json({ message: "Forbidden: Super Admin access required" });
+    }
+    
+    return next();
+  } catch (error) {
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const requireOrgAccess = (allowedRoles: string[] = ["SUPER_ADMIN", "ORG_ADMIN"]): RequestHandler => {
+  return async (req, res, next) => {
+    try {
+      const user = req.user as any;
+      // Try to get orgId from params, query, or body
+      const orgId = req.params.orgId || req.query.orgId || req.body.orgId;
+      
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      
+      const userWithRoles = await storage.getUserWithRoles(user.claims.sub);
+      
+      if (!userWithRoles) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      // Super admins have access to all organizations
+      if (userWithRoles.isSuperAdmin) {
+        return next();
+      }
+      
+      // Check if user has the required role for this organization
+      const hasOrgAccess = userWithRoles.roles.some(
+        (role: any) => role.orgId === orgId && allowedRoles.includes(role.role)
+      );
+      
+      if (!hasOrgAccess) {
+        return res.status(403).json({ message: "Forbidden: You do not have access to this organization" });
+      }
+      
+      return next();
+    } catch (error) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  };
+};
