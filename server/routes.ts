@@ -481,6 +481,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Transfers
+  app.get("/api/organizations/:orgId/transfers", async (req, res) => {
+    try {
+      const transfers = await storage.getTransfersByOrg(req.params.orgId);
+      res.json(transfers);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/players/:upid/transfers", async (req, res) => {
+    try {
+      const transfers = await storage.getTransfersByPlayer(req.params.upid);
+      res.json(transfers);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/teams/:teamId/transfers", async (req, res) => {
+    try {
+      const transfers = await storage.getTransfersByTeam(req.params.teamId);
+      res.json(transfers);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/transfers/:id", async (req, res) => {
+    try {
+      const transfer = await storage.getTransferById(req.params.id);
+      if (!transfer) {
+        return res.status(404).json({ error: "Transfer not found" });
+      }
+      res.json(transfer);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/transfers", async (req, res) => {
+    try {
+      const { insertTransferSchema } = await import("@shared/schema");
+      const validatedData = insertTransferSchema.parse(req.body);
+      
+      const transfer = await storage.createTransfer(validatedData);
+      res.status(201).json(transfer);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/transfers/:id", async (req, res) => {
+    try {
+      const { updateTransferSchema } = await import("@shared/schema");
+      const validatedData = updateTransferSchema.parse(req.body);
+      
+      const transfer = await storage.updateTransfer(req.params.id, validatedData);
+      if (!transfer) {
+        return res.status(404).json({ error: "Transfer not found" });
+      }
+      res.json(transfer);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/transfers/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteTransfer(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Transfer not found" });
+      }
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Tournaments
   app.get("/api/tournaments", async (req, res) => {
     try {
