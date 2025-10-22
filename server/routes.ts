@@ -184,7 +184,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Players
-  app.get("/api/players", async (req, res) => {
+  app.get("/api/players", isAuthenticated, requireOrgAccess(["SUPER_ADMIN", "ORG_ADMIN", "VIEWER"]), async (req, res) => {
     try {
       const orgId = req.query.orgId as string;
       if (!orgId) {
@@ -197,7 +197,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/players/search", async (req, res) => {
+  app.get("/api/players/search", isAuthenticated, requireOrgAccess(["SUPER_ADMIN", "ORG_ADMIN", "VIEWER"]), async (req, res) => {
     try {
       const orgId = req.query.orgId as string;
       const query = req.query.q as string;
@@ -211,7 +211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/players/:id", async (req, res) => {
+  app.get("/api/players/:id", isAuthenticated, async (req, res) => {
     try {
       const player = await storage.getPlayerById(req.params.id);
       if (!player) {
@@ -223,7 +223,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/players", async (req, res) => {
+  app.post("/api/players", isAuthenticated, requireOrgAccess(["SUPER_ADMIN", "ORG_ADMIN"]), async (req, res) => {
     try {
       // Extract and validate request body
       const { docType, docNumber, ...playerData } = req.body;
@@ -270,7 +270,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/players/:id", async (req, res) => {
+  app.patch("/api/players/:id", isAuthenticated, async (req, res) => {
     try {
       const player = await storage.updatePlayer(req.params.id, req.body);
       if (!player) {
@@ -283,7 +283,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Player Documents
-  app.get("/api/organizations/:orgId/documents", async (req, res) => {
+  app.get("/api/organizations/:orgId/documents", isAuthenticated, requireOrgAccess(["SUPER_ADMIN", "ORG_ADMIN", "VIEWER"]), async (req, res) => {
     try {
       const verified = req.query.verified !== undefined
         ? req.query.verified === 'true'
@@ -295,7 +295,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/players/:upid/documents", async (req, res) => {
+  app.get("/api/players/:upid/documents", isAuthenticated, async (req, res) => {
     try {
       const documents = await storage.getPlayerDocuments(req.params.upid);
       res.json(documents);
@@ -304,7 +304,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/players/:upid/documents", async (req, res) => {
+  app.post("/api/players/:upid/documents", isAuthenticated, async (req, res) => {
     try {
       const validatedData = insertPlayerDocumentSchema.parse({
         ...req.body,
@@ -330,7 +330,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/player-documents/:id", async (req, res) => {
+  app.patch("/api/player-documents/:id", isAuthenticated, async (req, res) => {
     try {
       const document = await storage.updatePlayerDocument(req.params.id, req.body);
       if (!document) {
@@ -342,7 +342,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/player-documents/:id", async (req, res) => {
+  app.delete("/api/player-documents/:id", isAuthenticated, async (req, res) => {
     try {
       await storage.deletePlayerDocument(req.params.id);
       res.status(204).send();
@@ -352,7 +352,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Tournament Players (TPID)
-  app.get("/api/tournaments/:tournamentId/players", async (req, res) => {
+  app.get("/api/tournaments/:tournamentId/players", isAuthenticated, async (req, res) => {
     try {
       const players = await storage.getTournamentPlayers(req.params.tournamentId);
       res.json(players);
@@ -361,7 +361,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/tournaments/:tournamentId/players", async (req, res) => {
+  app.post("/api/tournaments/:tournamentId/players", isAuthenticated, async (req, res) => {
     try {
       // Check if player already exists in this tournament
       const existing = await storage.findTournamentPlayer(
@@ -391,7 +391,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/tournament-players/:id", async (req, res) => {
+  app.patch("/api/tournament-players/:id", isAuthenticated, async (req, res) => {
     try {
       const tournamentPlayer = await storage.updateTournamentPlayer(req.params.id, req.body);
       if (!tournamentPlayer) {
@@ -404,7 +404,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Roster Members
-  app.get("/api/teams/:teamId/roster", async (req, res) => {
+  app.get("/api/teams/:teamId/roster", isAuthenticated, async (req, res) => {
     try {
       const roster = await storage.getRosterMembersByTeam(req.params.teamId);
       res.json(roster);
@@ -413,7 +413,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/tournaments/:tournamentId/roster", async (req, res) => {
+  app.get("/api/tournaments/:tournamentId/roster", isAuthenticated, async (req, res) => {
     try {
       const roster = await storage.getRosterMembersByTournament(req.params.tournamentId);
       res.json(roster);
@@ -422,7 +422,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/teams/:teamId/roster", async (req, res) => {
+  app.post("/api/teams/:teamId/roster", isAuthenticated, async (req, res) => {
     try {
       const validatedData = insertRosterMemberSchema.parse({
         ...req.body,
@@ -439,7 +439,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/roster-members/:id", async (req, res) => {
+  app.patch("/api/roster-members/:id", isAuthenticated, async (req, res) => {
     try {
       const rosterMember = await storage.updateRosterMember(req.params.id, req.body);
       if (!rosterMember) {
@@ -452,7 +452,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Eligibility
-  app.post("/api/tournaments/:tournamentId/check-eligibility", async (req, res) => {
+  app.post("/api/tournaments/:tournamentId/check-eligibility", isAuthenticated, async (req, res) => {
     try {
       const { upid, teamId } = req.body;
       if (!upid) {
@@ -468,7 +468,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/tournaments/:tournamentId/eligibility-rules", async (req, res) => {
+  app.get("/api/tournaments/:tournamentId/eligibility-rules", isAuthenticated, async (req, res) => {
     try {
       const rules = await storage.getEligibilityRulesByTournament(req.params.tournamentId);
       res.json(rules);
@@ -477,7 +477,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/tournaments/:tournamentId/eligibility-rules", async (req, res) => {
+  app.post("/api/tournaments/:tournamentId/eligibility-rules", isAuthenticated, async (req, res) => {
     try {
       const { insertEligibilityRuleSchema } = await import("@shared/schema");
       const validatedData = insertEligibilityRuleSchema.parse({
@@ -495,7 +495,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/eligibility-rules/:id", async (req, res) => {
+  app.patch("/api/eligibility-rules/:id", isAuthenticated, async (req, res) => {
     try {
       const { updateEligibilityRuleSchema } = await import("@shared/schema");
       // Validate update data using dedicated update schema
@@ -514,7 +514,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/eligibility-rules/:id", async (req, res) => {
+  app.delete("/api/eligibility-rules/:id", isAuthenticated, async (req, res) => {
     try {
       const deleted = await storage.deleteEligibilityRule(req.params.id);
       if (!deleted) {
@@ -527,7 +527,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Contracts
-  app.get("/api/organizations/:orgId/contracts", async (req, res) => {
+  app.get("/api/organizations/:orgId/contracts", isAuthenticated, requireOrgAccess(["SUPER_ADMIN", "ORG_ADMIN", "VIEWER"]), async (req, res) => {
     try {
       const contracts = await storage.getContractsByOrg(req.params.orgId);
       res.json(contracts);
@@ -536,7 +536,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/players/:upid/contracts", async (req, res) => {
+  app.get("/api/players/:upid/contracts", isAuthenticated, async (req, res) => {
     try {
       const contracts = await storage.getContractsByPlayer(req.params.upid);
       res.json(contracts);
@@ -545,7 +545,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/teams/:teamId/contracts", async (req, res) => {
+  app.get("/api/teams/:teamId/contracts", isAuthenticated, async (req, res) => {
     try {
       const contracts = await storage.getContractsByTeam(req.params.teamId);
       res.json(contracts);
@@ -554,7 +554,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/contracts/:id", async (req, res) => {
+  app.get("/api/contracts/:id", isAuthenticated, async (req, res) => {
     try {
       const contract = await storage.getContractById(req.params.id);
       if (!contract) {
@@ -566,7 +566,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/contracts", async (req, res) => {
+  app.post("/api/contracts", isAuthenticated, async (req, res) => {
     try {
       const { insertContractSchema } = await import("@shared/schema");
       const validatedData = insertContractSchema.parse(req.body);
@@ -581,7 +581,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/contracts/:id", async (req, res) => {
+  app.patch("/api/contracts/:id", isAuthenticated, async (req, res) => {
     try {
       const { updateContractSchema } = await import("@shared/schema");
       const validatedData = updateContractSchema.parse(req.body);
@@ -599,7 +599,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/contracts/:id", async (req, res) => {
+  app.delete("/api/contracts/:id", isAuthenticated, async (req, res) => {
     try {
       const deleted = await storage.deleteContract(req.params.id);
       if (!deleted) {
@@ -612,7 +612,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Transfers
-  app.get("/api/organizations/:orgId/transfers", async (req, res) => {
+  app.get("/api/organizations/:orgId/transfers", isAuthenticated, requireOrgAccess(["SUPER_ADMIN", "ORG_ADMIN", "VIEWER"]), async (req, res) => {
     try {
       const transfers = await storage.getTransfersByOrg(req.params.orgId);
       res.json(transfers);
@@ -621,7 +621,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/players/:upid/transfers", async (req, res) => {
+  app.get("/api/players/:upid/transfers", isAuthenticated, async (req, res) => {
     try {
       const transfers = await storage.getTransfersByPlayer(req.params.upid);
       res.json(transfers);
@@ -630,7 +630,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/teams/:teamId/transfers", async (req, res) => {
+  app.get("/api/teams/:teamId/transfers", isAuthenticated, async (req, res) => {
     try {
       const transfers = await storage.getTransfersByTeam(req.params.teamId);
       res.json(transfers);
@@ -639,7 +639,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/transfers/:id", async (req, res) => {
+  app.get("/api/transfers/:id", isAuthenticated, async (req, res) => {
     try {
       const transfer = await storage.getTransferById(req.params.id);
       if (!transfer) {
@@ -651,7 +651,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/transfers", async (req, res) => {
+  app.post("/api/transfers", isAuthenticated, async (req, res) => {
     try {
       const { insertTransferSchema } = await import("@shared/schema");
       const validatedData = insertTransferSchema.parse(req.body);
@@ -666,7 +666,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/transfers/:id", async (req, res) => {
+  app.patch("/api/transfers/:id", isAuthenticated, async (req, res) => {
     try {
       const { updateTransferSchema } = await import("@shared/schema");
       const validatedData = updateTransferSchema.parse(req.body);
@@ -684,7 +684,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/transfers/:id", async (req, res) => {
+  app.delete("/api/transfers/:id", isAuthenticated, async (req, res) => {
     try {
       const deleted = await storage.deleteTransfer(req.params.id);
       if (!deleted) {
@@ -697,7 +697,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Disciplinary Records
-  app.get("/api/organizations/:orgId/disciplinary-records", async (req, res) => {
+  app.get("/api/organizations/:orgId/disciplinary-records", isAuthenticated, requireOrgAccess(["SUPER_ADMIN", "ORG_ADMIN", "VIEWER"]), async (req, res) => {
     try {
       const records = await storage.getDisciplinaryRecordsByOrg(req.params.orgId);
       res.json(records);
@@ -706,7 +706,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/players/:upid/disciplinary-records", async (req, res) => {
+  app.get("/api/players/:upid/disciplinary-records", isAuthenticated, async (req, res) => {
     try {
       const records = await storage.getDisciplinaryRecordsByPlayer(req.params.upid);
       res.json(records);
@@ -715,7 +715,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/tournaments/:tournamentId/disciplinary-records", async (req, res) => {
+  app.get("/api/tournaments/:tournamentId/disciplinary-records", isAuthenticated, async (req, res) => {
     try {
       const records = await storage.getDisciplinaryRecordsByTournament(req.params.tournamentId);
       res.json(records);
@@ -724,7 +724,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/disciplinary-records/:id", async (req, res) => {
+  app.get("/api/disciplinary-records/:id", isAuthenticated, async (req, res) => {
     try {
       const record = await storage.getDisciplinaryRecordById(req.params.id);
       if (!record) {
@@ -736,7 +736,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/disciplinary-records", async (req, res) => {
+  app.post("/api/disciplinary-records", isAuthenticated, async (req, res) => {
     try {
       const { insertDisciplinaryRecordSchema } = await import("@shared/schema");
       const validatedData = insertDisciplinaryRecordSchema.parse(req.body);
@@ -751,7 +751,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/disciplinary-records/:id", async (req, res) => {
+  app.patch("/api/disciplinary-records/:id", isAuthenticated, async (req, res) => {
     try {
       const record = await storage.updateDisciplinaryRecord(req.params.id, req.body);
       if (!record) {
@@ -763,7 +763,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/disciplinary-records/:id", async (req, res) => {
+  app.delete("/api/disciplinary-records/:id", isAuthenticated, async (req, res) => {
     try {
       const deleted = await storage.deleteDisciplinaryRecord(req.params.id);
       if (!deleted) {
@@ -776,7 +776,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Tournaments
-  app.get("/api/tournaments", async (req, res) => {
+  app.get("/api/tournaments", isAuthenticated, requireOrgAccess(["SUPER_ADMIN", "ORG_ADMIN", "VIEWER"]), async (req, res) => {
     try {
       const orgId = req.query.orgId as string;
       if (!orgId) {
@@ -789,7 +789,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/tournaments/:id", async (req, res) => {
+  app.get("/api/tournaments/:id", isAuthenticated, async (req, res) => {
     try {
       const tournament = await storage.getTournamentById(req.params.id);
       if (!tournament) {
@@ -801,7 +801,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/tournaments/slug/:slug", async (req, res) => {
+  app.get("/api/tournaments/slug/:slug", isAuthenticated, async (req, res) => {
     try {
       const tournament = await storage.getTournamentBySlug(req.params.slug);
       if (!tournament) {
@@ -813,7 +813,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/tournaments", async (req, res) => {
+  app.post("/api/tournaments", isAuthenticated, async (req, res) => {
     try {
       const validatedData = insertTournamentSchema.parse(req.body);
       const tournament = await storage.createTournament(validatedData);
@@ -826,7 +826,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/tournaments/:id", async (req, res) => {
+  app.patch("/api/tournaments/:id", isAuthenticated, async (req, res) => {
     try {
       const tournament = await storage.updateTournament(req.params.id, req.body);
       if (!tournament) {
@@ -838,7 +838,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/tournaments/:id", async (req, res) => {
+  app.delete("/api/tournaments/:id", isAuthenticated, async (req, res) => {
     try {
       await storage.deleteTournament(req.params.id);
       res.status(204).send();
@@ -848,7 +848,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Teams
-  app.get("/api/tournaments/:tournamentId/teams", async (req, res) => {
+  app.get("/api/tournaments/:tournamentId/teams", isAuthenticated, async (req, res) => {
     try {
       const teams = await storage.getTeamsByTournament(req.params.tournamentId);
       res.json(teams);
@@ -857,7 +857,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/tournaments/:tournamentId/teams", async (req, res) => {
+  app.post("/api/tournaments/:tournamentId/teams", isAuthenticated, async (req, res) => {
     try {
       const validatedData = insertTeamSchema.parse({
         ...req.body,
@@ -873,7 +873,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/tournaments/:tournamentId/teams/bulk", async (req, res) => {
+  app.post("/api/tournaments/:tournamentId/teams/bulk", isAuthenticated, async (req, res) => {
     try {
       const { teams } = req.body;
       if (!Array.isArray(teams)) {
@@ -890,7 +890,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/teams/:id", async (req, res) => {
+  app.patch("/api/teams/:id", isAuthenticated, async (req, res) => {
     try {
       const team = await storage.updateTeam(req.params.id, req.body);
       if (!team) {
@@ -902,7 +902,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/teams/:id", async (req, res) => {
+  app.delete("/api/teams/:id", isAuthenticated, async (req, res) => {
     try {
       await storage.deleteTeam(req.params.id);
       res.status(204).send();
@@ -912,7 +912,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Matches
-  app.get("/api/tournaments/:tournamentId/matches", async (req, res) => {
+  app.get("/api/tournaments/:tournamentId/matches", isAuthenticated, async (req, res) => {
     try {
       const matches = await storage.getMatchesByTournament(req.params.tournamentId);
       res.json(matches);
@@ -921,7 +921,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/rounds/:roundId/matches", async (req, res) => {
+  app.get("/api/rounds/:roundId/matches", isAuthenticated, async (req, res) => {
     try {
       const matches = await storage.getMatchesByRound(req.params.roundId);
       res.json(matches);
@@ -930,7 +930,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/matches", async (req, res) => {
+  app.post("/api/matches", isAuthenticated, async (req, res) => {
     try {
       const validatedData = insertMatchSchema.parse(req.body);
       const match = await storage.createMatch(validatedData);
@@ -943,7 +943,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/matches/:id", async (req, res) => {
+  app.patch("/api/matches/:id", isAuthenticated, async (req, res) => {
     try {
       const match = await storage.updateMatch(req.params.id, req.body);
       if (!match) {
@@ -956,7 +956,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Fixture Generation
-  app.post("/api/tournaments/:tournamentId/generate-fixtures", async (req, res) => {
+  app.post("/api/tournaments/:tournamentId/generate-fixtures", isAuthenticated, async (req, res) => {
     try {
       const { tournamentId } = req.params;
       const { startDate, kickoffTime, weekendsOnly, homeAndAway, venue } = req.body;
@@ -1032,7 +1032,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Standings
-  app.get("/api/tournaments/:tournamentId/standings", async (req, res) => {
+  app.get("/api/tournaments/:tournamentId/standings", isAuthenticated, async (req, res) => {
     try {
       const { tournamentId } = req.params;
 
@@ -1051,7 +1051,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reports - Player Statistics
-  app.get("/api/organizations/:orgId/reports/players", async (req, res) => {
+  app.get("/api/organizations/:orgId/reports/players", isAuthenticated, requireOrgAccess(["SUPER_ADMIN", "ORG_ADMIN", "VIEWER"]), async (req, res) => {
     try {
       const { orgId } = req.params;
 
@@ -1091,7 +1091,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reports - Tournament Statistics
-  app.get("/api/organizations/:orgId/reports/tournaments", async (req, res) => {
+  app.get("/api/organizations/:orgId/reports/tournaments", isAuthenticated, requireOrgAccess(["SUPER_ADMIN", "ORG_ADMIN", "VIEWER"]), async (req, res) => {
     try {
       const { orgId } = req.params;
 
@@ -1124,7 +1124,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reports - Disciplinary Statistics
-  app.get("/api/organizations/:orgId/reports/disciplinary", async (req, res) => {
+  app.get("/api/organizations/:orgId/reports/disciplinary", isAuthenticated, requireOrgAccess(["SUPER_ADMIN", "ORG_ADMIN", "VIEWER"]), async (req, res) => {
     try {
       const { orgId } = req.params;
 
