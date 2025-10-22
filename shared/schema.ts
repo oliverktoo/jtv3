@@ -10,9 +10,17 @@ import {
   uuid,
   date,
   jsonb,
+  index,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+// Authentication Enums
+export const userRoleEnum = pgEnum("user_role_enum", [
+  "SUPER_ADMIN",    // Platform super admin - full access across all organizations
+  "ORG_ADMIN",      // Organization admin - full access within assigned organizations
+  "VIEWER",         // Read-only access
+]);
 
 // Enums
 export const tournamentModelEnum = pgEnum("tournament_model_enum", [
@@ -167,6 +175,37 @@ export const wards = pgTable("wards", {
   subCountyId: uuid("sub_county_id").notNull().references(() => subCounties.id),
   name: text("name").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Authentication Tables (Required for Replit Auth)
+export const sessions = pgTable(
+  "sessions",
+  {
+    sid: varchar("sid").primaryKey(),
+    sess: jsonb("sess").notNull(),
+    expire: timestamp("expire").notNull(),
+  },
+  (table) => [index("IDX_session_expire").on(table.expire)],
+);
+
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email").unique(),
+  firstName: varchar("first_name"),
+  lastName: varchar("last_name"),
+  profileImageUrl: varchar("profile_image_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Role Assignment Table - links users to organizations with specific roles
+export const userOrganizationRoles = pgTable("user_organization_roles", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  orgId: uuid("org_id").references(() => organizations.id, { onDelete: "cascade" }), // null means platform-wide role (SUPER_ADMIN)
+  role: userRoleEnum("role").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const playerRegistry = pgTable("player_registry", {
@@ -518,6 +557,18 @@ export const updateTransferSchema = createInsertSchema(transfers).omit({
 }).partial();
 
 // Types
+// Authentication Types
+export type UpsertUser = typeof users.$inferInsert;
+export type User = typeof users.$inferSelect;
+
+export const insertUserOrganizationRoleSchema = createInsertSchema(userOrganizationRoles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertUserOrganizationRole = z.infer<typeof insertUserOrganizationRoleSchema>;
+export type UserOrganizationRole = typeof userOrganizationRoles.$inferSelect;
+
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type Organization = typeof organizations.$inferSelect;
 

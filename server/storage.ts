@@ -26,6 +26,10 @@ import {
   type UpdateTransfer,
   type DisciplinaryRecord,
   type InsertDisciplinaryRecord,
+  type User,
+  type UpsertUser,
+  type UserOrganizationRole,
+  type InsertUserOrganizationRole,
   tournaments,
   teams,
   matches,
@@ -47,11 +51,25 @@ import {
   contracts,
   transfers,
   disciplinaryRecords,
+  users,
+  userOrganizationRoles,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, or, ilike, sql } from "drizzle-orm";
 
 export interface IStorage {
+  // Users & Authentication
+  getUser(id: string): Promise<User | undefined>;
+  upsertUser(user: UpsertUser): Promise<User>;
+  getUserWithRoles(id: string): Promise<any>;
+  
+  // User Roles
+  getUserRoles(userId: string): Promise<UserOrganizationRole[]>;
+  getUserRolesByOrg(userId: string, orgId: string): Promise<UserOrganizationRole | undefined>;
+  assignUserRole(role: InsertUserOrganizationRole): Promise<UserOrganizationRole>;
+  removeUserRole(userId: string, orgId: string | null): Promise<boolean>;
+  getAllUsersWithRoles(): Promise<any[]>;
+
   // Tournaments
   getTournaments(orgId: string): Promise<Tournament[]>;
   getTournamentById(id: string): Promise<Tournament | undefined>;
@@ -145,6 +163,95 @@ export interface IStorage {
 }
 
 export class DbStorage implements IStorage {
+  // Users & Authentication
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return user;
+  }
+
+  async getUserWithRoles(id: string): Promise<any> {
+    const user = await this.getUser(id);
+    if (!user) return null;
+
+    const roles = await this.getUserRoles(id);
+    const isSuperAdmin = roles.some(r => r.role === "SUPER_ADMIN" && r.orgId === null);
+
+    return {
+      ...user,
+      roles,
+      isSuperAdmin,
+    };
+  }
+
+  // User Roles
+  async getUserRoles(userId: string): Promise<UserOrganizationRole[]> {
+    return await db
+      .select()
+      .from(userOrganizationRoles)
+      .where(eq(userOrganizationRoles.userId, userId));
+  }
+
+  async getUserRolesByOrg(userId: string, orgId: string): Promise<UserOrganizationRole | undefined> {
+    const [role] = await db
+      .select()
+      .from(userOrganizationRoles)
+      .where(
+        and(
+          eq(userOrganizationRoles.userId, userId),
+          eq(userOrganizationRoles.orgId, orgId)
+        )
+      );
+    return role;
+  }
+
+  async assignUserRole(roleData: InsertUserOrganizationRole): Promise<UserOrganizationRole> {
+    const [role] = await db
+      .insert(userOrganizationRoles)
+      .values(roleData)
+      .returning();
+    return role;
+  }
+
+  async removeUserRole(userId: string, orgId: string | null): Promise<boolean> {
+    const condition = orgId 
+      ? and(eq(userOrganizationRoles.userId, userId), eq(userOrganizationRoles.orgId, orgId))
+      : and(eq(userOrganizationRoles.userId, userId), sql`${userOrganizationRoles.orgId} IS NULL`);
+    
+    const result = await db
+      .delete(userOrganizationRoles)
+      .where(condition);
+    return true;
+  }
+
+  async getAllUsersWithRoles(): Promise<any[]> {
+    const allUsers = await db.select().from(users);
+    const usersWithRoles = await Promise.all(
+      allUsers.map(async (user) => {
+        const roles = await this.getUserRoles(user.id);
+        return {
+          ...user,
+          roles,
+        };
+      })
+    );
+    return usersWithRoles;
+  }
+
   // Tournaments
   async getTournaments(orgId: string): Promise<Tournament[]> {
     return await db
