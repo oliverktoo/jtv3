@@ -54,6 +54,7 @@ function ProtectedRouter() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/tournament/:slug" component={PublicTournament} />
       <Route path="/tournaments" component={Tournaments} />
       <Route path="/tournaments/:tournamentId" component={TournamentDetail} />
       <Route path="/teams" component={Teams} />
