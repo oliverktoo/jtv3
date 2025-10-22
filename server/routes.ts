@@ -396,6 +396,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Contracts
+  app.get("/api/organizations/:orgId/contracts", async (req, res) => {
+    try {
+      const contracts = await storage.getContractsByOrg(req.params.orgId);
+      res.json(contracts);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/players/:upid/contracts", async (req, res) => {
+    try {
+      const contracts = await storage.getContractsByPlayer(req.params.upid);
+      res.json(contracts);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/teams/:teamId/contracts", async (req, res) => {
+    try {
+      const contracts = await storage.getContractsByTeam(req.params.teamId);
+      res.json(contracts);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/contracts/:id", async (req, res) => {
+    try {
+      const contract = await storage.getContractById(req.params.id);
+      if (!contract) {
+        return res.status(404).json({ error: "Contract not found" });
+      }
+      res.json(contract);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/contracts", async (req, res) => {
+    try {
+      const { insertContractSchema } = await import("@shared/schema");
+      const validatedData = insertContractSchema.parse(req.body);
+      
+      const contract = await storage.createContract(validatedData);
+      res.status(201).json(contract);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/contracts/:id", async (req, res) => {
+    try {
+      const { updateContractSchema } = await import("@shared/schema");
+      const validatedData = updateContractSchema.parse(req.body);
+      
+      const contract = await storage.updateContract(req.params.id, validatedData);
+      if (!contract) {
+        return res.status(404).json({ error: "Contract not found" });
+      }
+      res.json(contract);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/contracts/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteContract(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Contract not found" });
+      }
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Tournaments
   app.get("/api/tournaments", async (req, res) => {
     try {
