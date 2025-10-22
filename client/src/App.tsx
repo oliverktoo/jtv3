@@ -15,6 +15,7 @@ import Standings from "@/pages/Standings";
 import Players from "@/pages/Players";
 import TeamRoster from "@/pages/TeamRoster";
 import Contracts from "@/pages/Contracts";
+import Transfers from "@/pages/Transfers";
 
 function Router() {
   return (
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/tournaments/:tournamentId" component={TournamentDetail} />
       <Route path="/players" component={Players} />
       <Route path="/contracts" component={Contracts} />
+      <Route path="/transfers" component={Transfers} />
       <Route path="/teams/:teamId/roster" component={TeamRoster} />
       <Route path="/fixtures" component={Fixtures} />
       <Route path="/standings" component={Standings} />
