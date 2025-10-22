@@ -30,7 +30,7 @@ interface Tournament {
 }
 
 export default function Teams() {
-  const { organizations } = useOrganizations();
+  const { data: organizations = [] } = useOrganizations();
   const [selectedOrg, setSelectedOrg] = useState<string>("");
   const [selectedTournament, setSelectedTournament] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");

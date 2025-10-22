@@ -1,0 +1,53 @@
+Console error on teams tab
+hook.js:608 TypeError: Cannot read properties of undefined (reading 'map')
+    at ete (index-r9WImZxK.js:437:48757)
+    at nv (index-r9WImZxK.js:38:17018)
+    at Db (index-r9WImZxK.js:40:44058)
+    at Ab (index-r9WImZxK.js:40:39790)
+    at GM (index-r9WImZxK.js:40:39718)
+    at Oh (index-r9WImZxK.js:40:39570)
+    at Px (index-r9WImZxK.js:40:35934)
+    at fw (index-r9WImZxK.js:40:36738)
+    at qi (index-r9WImZxK.js:38:3279)
+    at index-r9WImZxK.js:40:34263
+overrideMethod @ hook.js:608Understand this error
+index-r9WImZxK.js:38 Uncaught TypeError: Cannot read properties of undefined (reading 'map')
+    at ete (index-r9WImZxK.js:437:48757)
+    at nv (index-r9WImZxK.js:38:17018)
+    at Db (index-r9WImZxK.js:40:44058)
+    at Ab (index-r9WImZxK.js:40:39790)
+    at GM (index-r9WImZxK.js:40:39718)
+    at Oh (index-r9WImZxK.js:40:39570)
+    at Px (index-r9WImZxK.js:40:35934)
+    at fw (index-r9WImZxK.js:40:36738)
+    at qi (index-r9WImZxK.js:38:3279)
+    at index-r9WImZxK.js:40:34263
+ 
+Console Error on eligibility
+hook.js:608 Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+overrideMethod @ hook.js:608Understand this warning
+hook.js:608 TypeError: Cannot read properties of undefined (reading 'map')
+    at Jee (index-r9WImZxK.js:437:44565)
+    at nv (index-r9WImZxK.js:38:17018)
+    at Db (index-r9WImZxK.js:40:44058)
+    at Ab (index-r9WImZxK.js:40:39790)
+    at GM (index-r9WImZxK.js:40:39718)
+    at Oh (index-r9WImZxK.js:40:39570)
+    at Px (index-r9WImZxK.js:40:35934)
+    at fw (index-r9WImZxK.js:40:36738)
+    at qi (index-r9WImZxK.js:38:3279)
+    at index-r9WImZxK.js:40:34263
+overrideMethod @ hook.js:608Understand this error
+index-r9WImZxK.js:38 Uncaught TypeError: Cannot read properties of undefined (reading 'map')
+    at Jee (index-r9WImZxK.js:437:44565)
+    at nv (index-r9WImZxK.js:38:17018)
+    at Db (index-r9WImZxK.js:40:44058)
+    at Ab (index-r9WImZxK.js:40:39790)
+    at GM (index-r9WImZxK.js:40:39718)
+    at Oh (index-r9WImZxK.js:40:39570)
+    at Px (index-r9WImZxK.js:40:35934)
+    at fw (index-r9WImZxK.js:40:36738)
+    at qi (index-r9WImZxK.js:38:3279)
+    at index-r9WImZxK.js:40:34263
+ 
+

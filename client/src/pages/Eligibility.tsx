@@ -54,7 +54,7 @@ interface EligibilityCheckResult {
 
 export default function Eligibility() {
   const { toast } = useToast();
-  const { organizations } = useOrganizations();
+  const { data: organizations = [] } = useOrganizations();
   const [selectedOrg, setSelectedOrg] = useState<string>("");
   const [selectedTournament, setSelectedTournament] = useState<string>("");
   const [checkDialogOpen, setCheckDialogOpen] = useState(false);
