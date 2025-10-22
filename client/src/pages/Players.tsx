@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Plus, User, FileText } from "lucide-react";
+import { Search, Plus, User, FileText, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,13 +7,15 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useQuery } from "@tanstack/react-query";
 import { usePlayers, useCreatePlayer } from "@/hooks/usePlayers";
 import { useOrganizations } from "@/hooks/useReferenceData";
 import { useToast } from "@/hooks/use-toast";
-import { insertPlayerRegistrySchema } from "@shared/schema";
+import { insertPlayerRegistrySchema, type Contract } from "@shared/schema";
 import { format } from "date-fns";
 
 const createPlayerFormSchema = insertPlayerRegistrySchema.extend({
@@ -22,6 +24,89 @@ const createPlayerFormSchema = insertPlayerRegistrySchema.extend({
 });
 
 type CreatePlayerFormValues = z.infer<typeof createPlayerFormSchema>;
+
+function PlayerContracts({ upid }: { upid: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  const { data: contracts, isLoading } = useQuery<Contract[]>({
+    queryKey: ["/api/players", upid, "contracts"],
+    enabled: isOpen,
+  });
+
+  const { data: teams } = useQuery({
+    queryKey: ["/api/teams"],
+    queryFn: async () => {
+      const res = await fetch("/api/teams");
+      if (!res.ok) throw new Error("Failed to fetch teams");
+      return res.json();
+    },
+    enabled: isOpen && !!contracts,
+  });
+
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status) {
+      case "ACTIVE":
+        return "default";
+      case "PENDING":
+        return "secondary";
+      case "EXPIRED":
+      case "TERMINATED":
+        return "outline";
+      default:
+        return "secondary";
+    }
+  };
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-between"
+          data-testid={`button-view-contracts-${upid}`}
+        >
+          <span>Contract History</span>
+          {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-3">
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground text-center py-2">Loading contracts...</p>
+        ) : !contracts || contracts.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-2">No contracts found</p>
+        ) : (
+          <div className="space-y-2">
+            {contracts.map((contract) => {
+              const team = teams?.find((t: any) => t.id === contract.teamId);
+              return (
+                <div
+                  key={contract.id}
+                  className="border rounded-md p-3 text-sm"
+                  data-testid={`contract-item-${contract.id}`}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="font-medium">{team?.name || "Unknown Team"}</div>
+                    <Badge variant={getStatusBadgeVariant(contract.status)} className="text-xs">
+                      {contract.status}
+                    </Badge>
+                  </div>
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    <div>Type: {contract.contractType.replace("_", " ")}</div>
+                    <div>
+                      Period: {format(new Date(contract.startDate), "MMM d, yyyy")} -{" "}
+                      {contract.endDate ? format(new Date(contract.endDate), "MMM d, yyyy") : "Open-ended"}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 export default function Players() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -306,6 +391,9 @@ export default function Players() {
                   <div className="text-xs text-muted-foreground pt-2">
                     Registered {format(new Date(player.createdAt), "MMM d, yyyy")}
                   </div>
+                </div>
+                <div className="border-t mt-4 pt-4">
+                  <PlayerContracts upid={player.id} />
                 </div>
               </CardContent>
             </Card>
