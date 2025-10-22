@@ -109,6 +109,24 @@ export const transferTypeEnum = pgEnum("transfer_type_enum", [
   "LOAN_RETURN",
 ]);
 
+export const disciplinaryIncidentTypeEnum = pgEnum("disciplinary_incident_type_enum", [
+  "YELLOW_CARD",
+  "RED_CARD",
+  "SUSPENSION",
+  "FINE",
+  "WARNING",
+  "MISCONDUCT",
+  "OTHER",
+]);
+
+export const disciplinaryStatusEnum = pgEnum("disciplinary_status_enum", [
+  "ACTIVE",
+  "SERVED",
+  "APPEALED",
+  "OVERTURNED",
+  "CANCELLED",
+]);
+
 // Core Tables
 export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -233,6 +251,29 @@ export const transfers = pgTable("transfers", {
   effectiveDate: date("effective_date"),
   expiryDate: date("expiry_date"),
   terms: jsonb("terms"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const disciplinaryRecords = pgTable("disciplinary_records", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  upid: uuid("upid").notNull().references(() => playerRegistry.id),
+  orgId: uuid("org_id").notNull().references(() => organizations.id),
+  tournamentId: uuid("tournament_id").references(() => tournaments.id, { onDelete: "set null" }),
+  matchId: uuid("match_id").references(() => matches.id, { onDelete: "set null" }),
+  incidentType: disciplinaryIncidentTypeEnum("incident_type").notNull(),
+  status: disciplinaryStatusEnum("status").notNull().default("ACTIVE"),
+  incidentDate: date("incident_date").notNull(),
+  description: text("description").notNull(),
+  sanctionDetails: jsonb("sanction_details"),
+  matchesSuspended: integer("matches_suspended"),
+  fineAmount: integer("fine_amount"),
+  servingStartDate: date("serving_start_date"),
+  servingEndDate: date("serving_end_date"),
+  appealDate: date("appeal_date"),
+  appealOutcome: text("appeal_outcome"),
+  issuedBy: text("issued_by"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -525,3 +566,12 @@ export type Contract = typeof contracts.$inferSelect;
 export type InsertTransfer = z.infer<typeof insertTransferSchema>;
 export type UpdateTransfer = z.infer<typeof updateTransferSchema>;
 export type Transfer = typeof transfers.$inferSelect;
+
+export const insertDisciplinaryRecordSchema = createInsertSchema(disciplinaryRecords).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertDisciplinaryRecord = z.infer<typeof insertDisciplinaryRecordSchema>;
+export type DisciplinaryRecord = typeof disciplinaryRecords.$inferSelect;
