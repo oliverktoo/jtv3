@@ -8,6 +8,30 @@ Jamii Tourney v3 is a multi-model tournament management platform designed for Ke
 
 ## Recent Changes
 
+**Phase 4.3: Document Verification** (October 22, 2025)
+- Built admin document verification page at `/documents`
+- Storage method: `getDocumentsByOrg(orgId, verified?)` with JOIN to player_registry
+- API endpoint: GET `/api/organizations/:orgId/documents?verified=true|false`
+- UI features: Organization selector, status filter (All/Pending/Verified), verify/reject/revoke buttons
+- Verification workflow: Admin reviews documents, marks as verified (sets `verified=true`, `verifiedAt=timestamp`)
+- Cache invalidation: Mutations properly invalidate document queries
+- **Note**: Player creation form already includes document input fields (docType, docNumber)
+
+**Phase 4.2: Real Data Integration** (October 22, 2025)
+- Replaced all mock data with live database queries across Fixtures, Standings, and Dashboard
+- Stats API endpoint: GET `/api/organizations/:orgId/stats` with optimized WHERE clauses
+- Dashboard stats: Real-time counts for teams and completed matches
+- Standings page: Live standings calculation from match results
+- Fixtures page: Real match data with tournament/round/status filtering
+- **Optimization**: All endpoints use WHERE clauses instead of in-memory filtering for performance
+
+**Phase 4.1: Match Result Recording** (October 22, 2025)
+- Fixtures page with real-time result recording dialog
+- Pre-fills existing scores and status in edit mode
+- Result updates via useUpdateMatch hook
+- Auto-refresh: Standings recalculate automatically via cache invalidation
+- Integration: Match results → standings calculations working end-to-end
+
 **Phase 3.3: Disciplinary Tracking** (October 22, 2025)
 - Implemented complete disciplinary records management system
 - Database schema: `disciplinary_records` table with incident types, sanctions, status lifecycle

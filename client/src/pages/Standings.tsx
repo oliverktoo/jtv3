@@ -13,10 +13,14 @@ import {
 import { useOrganizations } from "@/hooks/useReferenceData";
 import { useTournaments } from "@/hooks/useTournaments";
 import { useStandings } from "@/hooks/useMatches";
+import { useToast } from "@/hooks/use-toast";
+import { format } from "date-fns";
+import * as XLSX from "xlsx";
 
 export default function Standings() {
   const [selectedOrgId, setSelectedOrgId] = useState("");
   const [selectedTournamentId, setSelectedTournamentId] = useState("");
+  const { toast } = useToast();
 
   const { data: organizations } = useOrganizations();
   const { data: tournaments } = useTournaments(selectedOrgId);
@@ -38,6 +42,62 @@ export default function Standings() {
   }, [tournaments, selectedTournamentId]);
 
   const selectedTournament = tournaments?.find((t) => t.id === selectedTournamentId);
+
+  const handleExportToExcel = () => {
+    if (standings.length === 0) {
+      toast({
+        title: "No data to export",
+        description: "There are no standings to export.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Prepare data for export
+    const exportData = standings.map((team: any) => ({
+      "Position": team.position,
+      "Team": team.team,
+      "Played": team.played,
+      "Won": team.won,
+      "Drawn": team.drawn,
+      "Lost": team.lost,
+      "Goals For": team.goalsFor,
+      "Goals Against": team.goalsAgainst,
+      "Goal Difference": team.goalDifference,
+      "Points": team.points,
+    }));
+
+    // Create worksheet and workbook
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Standings");
+
+    // Set column widths for better readability
+    worksheet['!cols'] = [
+      { wch: 10 }, // Position
+      { wch: 25 }, // Team
+      { wch: 10 }, // Played
+      { wch: 10 }, // Won
+      { wch: 10 }, // Drawn
+      { wch: 10 }, // Lost
+      { wch: 12 }, // Goals For
+      { wch: 15 }, // Goals Against
+      { wch: 15 }, // Goal Difference
+      { wch: 10 }, // Points
+    ];
+
+    // Generate filename with tournament name and date
+    const tournamentName = selectedTournament?.name || "Tournament";
+    const filename = `Standings_${tournamentName}_${format(new Date(), "yyyy-MM-dd")}.xlsx`;
+
+    // Download the file
+    XLSX.writeFile(workbook, filename);
+
+    toast({
+      title: "Export successful",
+      description: `Standings exported to ${filename}`,
+    });
+  };
 
   // Transform API standings data to component format
   const standings = standingsData.map((s: any, index: number) => ({
@@ -72,7 +132,12 @@ export default function Standings() {
             Current league table and team rankings
           </p>
         </div>
-        <Button variant="outline" data-testid="button-export-standings">
+        <Button 
+          variant="outline" 
+          onClick={handleExportToExcel}
+          disabled={standings.length === 0}
+          data-testid="button-export-standings"
+        >
           <Download className="h-4 w-4 mr-2" />
           Export to Excel
         </Button>

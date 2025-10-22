@@ -28,6 +28,7 @@ import { useTournaments } from "@/hooks/useTournaments";
 import { useMatches, useUpdateMatch } from "@/hooks/useMatches";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import * as XLSX from "xlsx";
 
 const recordResultSchema = z.object({
   homeScore: z.number().min(0, "Score must be 0 or greater"),
@@ -115,6 +116,58 @@ export default function Fixtures() {
     setIsRecordDialogOpen(true);
   };
 
+  const handleExportToExcel = () => {
+    if (filteredFixtures.length === 0) {
+      toast({
+        title: "No data to export",
+        description: "There are no fixtures to export.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Prepare data for export
+    const exportData = filteredFixtures.map((fixture: any) => ({
+      "Round": fixture.round,
+      "Home Team": fixture.homeTeam,
+      "Away Team": fixture.awayTeam,
+      "Score": fixture.status === "COMPLETED" 
+        ? `${fixture.homeScore ?? 0} - ${fixture.awayScore ?? 0}` 
+        : "-",
+      "Kickoff": fixture.kickoff ? format(new Date(fixture.kickoff), "PPP p") : "TBD",
+      "Venue": fixture.venue || "TBD",
+      "Status": fixture.status,
+    }));
+
+    // Create worksheet and workbook
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Fixtures");
+
+    // Set column widths for better readability
+    worksheet['!cols'] = [
+      { wch: 15 }, // Round
+      { wch: 25 }, // Home Team
+      { wch: 25 }, // Away Team
+      { wch: 12 }, // Score
+      { wch: 25 }, // Kickoff
+      { wch: 20 }, // Venue
+      { wch: 12 }, // Status
+    ];
+
+    // Generate filename with tournament name and date
+    const tournamentName = tournaments?.find(t => t.id === selectedTournamentId)?.name || "Tournament";
+    const filename = `Fixtures_${tournamentName}_${format(new Date(), "yyyy-MM-dd")}.xlsx`;
+
+    // Download the file
+    XLSX.writeFile(workbook, filename);
+
+    toast({
+      title: "Export successful",
+      description: `Fixtures exported to ${filename}`,
+    });
+  };
+
   // Transform matches data for FixtureCard
   const fixtures = matchesData.map((m: any) => ({
     id: m.match.id,
@@ -155,7 +208,12 @@ export default function Fixtures() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" data-testid="button-export-fixtures">
+          <Button 
+            variant="outline" 
+            onClick={handleExportToExcel}
+            disabled={filteredFixtures.length === 0}
+            data-testid="button-export-fixtures"
+          >
             <Download className="h-4 w-4 mr-2" />
             Export to Excel
           </Button>

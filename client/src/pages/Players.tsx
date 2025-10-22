@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Plus, User, FileText, ChevronDown, ChevronUp, ArrowRight } from "lucide-react";
+import { Search, Plus, User, FileText, ChevronDown, ChevronUp, ArrowRight, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +17,7 @@ import { useOrganizations } from "@/hooks/useReferenceData";
 import { useToast } from "@/hooks/use-toast";
 import { insertPlayerRegistrySchema, type Contract, type Transfer, type DisciplinaryRecord } from "@shared/schema";
 import { format } from "date-fns";
+import * as XLSX from "xlsx";
 
 const createPlayerFormSchema = insertPlayerRegistrySchema.extend({
   docType: z.string().optional(),
@@ -365,6 +366,58 @@ export default function Players() {
     }
   };
 
+  const handleExportToExcel = () => {
+    if (filteredPlayers.length === 0) {
+      toast({
+        title: "No data to export",
+        description: "There are no players to export.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Prepare data for export
+    const exportData = filteredPlayers.map((player: any) => ({
+      "UPID": player.id,
+      "First Name": player.firstName,
+      "Last Name": player.lastName,
+      "Date of Birth": player.dob ? format(new Date(player.dob), "yyyy-MM-dd") : "",
+      "Sex": player.sex || "",
+      "Nationality": player.nationality || "",
+      "Status": player.status,
+      "Registration Date": format(new Date(player.createdAt), "yyyy-MM-dd"),
+    }));
+
+    // Create worksheet and workbook
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Players");
+
+    // Set column widths for better readability
+    worksheet['!cols'] = [
+      { wch: 36 }, // UPID
+      { wch: 20 }, // First Name
+      { wch: 20 }, // Last Name
+      { wch: 15 }, // Date of Birth
+      { wch: 10 }, // Sex
+      { wch: 20 }, // Nationality
+      { wch: 12 }, // Status
+      { wch: 18 }, // Registration Date
+    ];
+
+    // Generate filename with organization name and date
+    const orgName = organizations?.find(o => o.id === orgId)?.name || "Organization";
+    const filename = `Player_Registry_${orgName}_${format(new Date(), "yyyy-MM-dd")}.xlsx`;
+
+    // Download the file
+    XLSX.writeFile(workbook, filename);
+
+    toast({
+      title: "Export successful",
+      description: `Player registry exported to ${filename}`,
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -383,14 +436,24 @@ export default function Players() {
           </p>
         </div>
 
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-create-player">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Player
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={handleExportToExcel}
+            disabled={filteredPlayers.length === 0}
+            data-testid="button-export-players"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export to Excel
+          </Button>
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-create-player">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Player
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Player</DialogTitle>
             </DialogHeader>
@@ -535,7 +598,8 @@ export default function Players() {
               </form>
             </Form>
           </DialogContent>
-        </Dialog>
+          </Dialog>
+        </div>
       </div>
 
       <div className="relative">
