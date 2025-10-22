@@ -21,6 +21,9 @@ import {
   type Contract,
   type InsertContract,
   type UpdateContract,
+  type Transfer,
+  type InsertTransfer,
+  type UpdateTransfer,
   tournaments,
   teams,
   matches,
@@ -40,6 +43,7 @@ import {
   rosterMembers,
   eligibilityRules,
   contracts,
+  transfers,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, or, ilike, sql } from "drizzle-orm";
@@ -109,6 +113,15 @@ export interface IStorage {
   createContract(contract: InsertContract): Promise<Contract>;
   updateContract(id: string, contract: UpdateContract): Promise<Contract | undefined>;
   deleteContract(id: string): Promise<boolean>;
+
+  // Transfers
+  getTransfersByPlayer(upid: string): Promise<Transfer[]>;
+  getTransfersByTeam(teamId: string): Promise<Transfer[]>;
+  getTransfersByOrg(orgId: string): Promise<Transfer[]>;
+  getTransferById(id: string): Promise<Transfer | undefined>;
+  createTransfer(transfer: InsertTransfer): Promise<Transfer>;
+  updateTransfer(id: string, transfer: UpdateTransfer): Promise<Transfer | undefined>;
+  deleteTransfer(id: string): Promise<boolean>;
 
   // Reference Data
   getOrganizations(): Promise<Organization[]>;
@@ -593,6 +606,62 @@ export class DbStorage implements IStorage {
     const result = await db
       .delete(contracts)
       .where(eq(contracts.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Transfers
+  async getTransfersByPlayer(upid: string): Promise<Transfer[]> {
+    return await db
+      .select()
+      .from(transfers)
+      .where(eq(transfers.upid, upid))
+      .orderBy(desc(transfers.createdAt));
+  }
+
+  async getTransfersByTeam(teamId: string): Promise<Transfer[]> {
+    return await db
+      .select()
+      .from(transfers)
+      .where(or(eq(transfers.fromTeamId, teamId), eq(transfers.toTeamId, teamId)))
+      .orderBy(desc(transfers.createdAt));
+  }
+
+  async getTransfersByOrg(orgId: string): Promise<Transfer[]> {
+    return await db
+      .select()
+      .from(transfers)
+      .where(eq(transfers.orgId, orgId))
+      .orderBy(desc(transfers.createdAt));
+  }
+
+  async getTransferById(id: string): Promise<Transfer | undefined> {
+    const [transfer] = await db
+      .select()
+      .from(transfers)
+      .where(eq(transfers.id, id))
+      .limit(1);
+    return transfer;
+  }
+
+  async createTransfer(transfer: InsertTransfer): Promise<Transfer> {
+    const [created] = await db.insert(transfers).values(transfer).returning();
+    return created;
+  }
+
+  async updateTransfer(id: string, transfer: UpdateTransfer): Promise<Transfer | undefined> {
+    const [updated] = await db
+      .update(transfers)
+      .set({ ...transfer, updatedAt: new Date() })
+      .where(eq(transfers.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTransfer(id: string): Promise<boolean> {
+    const result = await db
+      .delete(transfers)
+      .where(eq(transfers.id, id))
       .returning();
     return result.length > 0;
   }
