@@ -54,10 +54,22 @@ Preferred communication style: Simple, everyday language.
 
 *Infrastructure:* Replit Auth (OpenID Connect) for OAuth authentication via Google/GitHub/email, PostgreSQL session store with connect-pg-simple, three-tier role hierarchy (SUPER_ADMIN, ORG_ADMIN, VIEWER), and comprehensive authorization middleware system.
 
-*Security Model:* Three-layer security architecture:
-1. **Authentication Layer**: isAuthenticated middleware on ALL 63 API routes blocks unauthenticated access (401)
+*Security Model:* Three-layer security architecture with public access for tournament viewing:
+1. **Authentication Layer**: isAuthenticated middleware on 55 mutation API routes blocks unauthenticated access (401). 8 read-only routes are publicly accessible without authentication.
 2. **Organization Layer**: requireOrgAccess middleware on 14 organization-scoped routes (/api/organizations/:orgId/...) validates org membership (403)
 3. **Entity Layer**: Inline authorization on 25 critical ID-based routes (players, contracts, transfers, disciplinary, tournaments, player documents, teams, rosters, tournament players) uses checkUserOrgAccess helper to verify entity ownership before access
+
+*Public Access:* 8 read-only GET routes accessible without authentication to enable public tournament viewing:
+- GET /api/sports - Browse available sports
+- GET /api/tournaments/:id - View tournament details by ID
+- GET /api/tournaments/slug/:slug - View tournament details by slug
+- GET /api/tournaments/:tournamentId/teams - View tournament teams
+- GET /api/tournaments/:tournamentId/matches - View tournament fixtures
+- GET /api/rounds/:roundId/matches - View round-specific fixtures
+- GET /api/tournaments/:tournamentId/standings - View league standings
+- GET /api/tournaments/:tournamentId/players - View tournament roster
+
+All mutation routes (POST/PATCH/DELETE) remain protected and require authentication + appropriate role permissions.
 
 *User Management:* SUPER_ADMIN can assign platform-wide or organization-specific roles to users via User Management page. Role assignments stored in userOrganizationRoles junction table with cascade delete protection. Landing page for logged-out users with seamless OAuth login flow.
 
@@ -69,6 +81,12 @@ Preferred communication style: Simple, everyday language.
 
 **Tournament Features**:
 - **Tournament Creation & Management**: Dialogs for creating tournaments and generating fixtures with configurable scheduling.
+- **Public Tournament Viewing**: Public-facing tournament pages accessible without authentication at /tournament/:slug. Features include:
+  - Real-time fixtures with scores and match times
+  - League standings tables
+  - Participating teams and rosters
+  - Shareable URLs for fan engagement (e.g., /tournament/county-championship-2025)
+  - Works for both authenticated and unauthenticated users
 - **Reports & Analytics**: Comprehensive reports page with player statistics, tournament summaries, disciplinary reports, and Excel export functionality.
 - **Eligibility Rules Engine**: Expanded `eligibility_rule_type_enum` with 8 rule types (e.g., AGE_RANGE, NATIONALITY) and a service for validation logic.
 - **Tournament Player ID (TPID) System**: Infrastructure for managing tournament players and team rosters.
