@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -8,6 +8,7 @@ import AppSidebar from "@/components/AppSidebar";
 import ThemeToggle from "@/components/ThemeToggle";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
+import PublicTournament from "@/pages/PublicTournament";
 import Home from "@/pages/Home";
 import Tournaments from "@/pages/Tournaments";
 import TournamentDetail from "@/pages/TournamentDetail";
@@ -24,8 +25,32 @@ import Teams from "@/pages/Teams";
 import Reports from "@/pages/Reports";
 import UserManagement from "@/pages/UserManagement";
 import { useAuth } from "@/hooks/useAuth";
+import { useEffect } from "react";
 
-function Router() {
+// Public routes that don't require authentication
+function PublicRoutes() {
+  return (
+    <div className="min-h-screen">
+      <Switch>
+        <Route path="/tournament/:slug" component={PublicTournament} />
+        <Route path="/" component={Landing} />
+        <Route component={NotFound} />
+      </Switch>
+    </div>
+  );
+}
+
+// Protected routes that require authentication
+function ProtectedRouter() {
+  const { isAuthenticated } = useAuth();
+  const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setLocation("/");
+    }
+  }, [isAuthenticated, setLocation]);
+
   return (
     <Switch>
       <Route path="/" component={Home} />
@@ -64,7 +89,7 @@ function AuthenticatedApp() {
           </header>
           <main className="flex-1 overflow-y-auto p-8">
             <div className="max-w-7xl mx-auto">
-              <Router />
+              <ProtectedRouter />
             </div>
           </main>
         </div>
@@ -75,6 +100,7 @@ function AuthenticatedApp() {
 
 function AppContent() {
   const { isAuthenticated, isLoading } = useAuth();
+  const [location] = useLocation();
 
   if (isLoading) {
     return (
@@ -82,6 +108,14 @@ function AppContent() {
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" data-testid="spinner-loading" />
       </div>
     );
+  }
+
+  // Public routes accessible without authentication
+  const publicRoutes = ["/tournament/"];
+  const isPublicRoute = publicRoutes.some(route => location.startsWith(route));
+
+  if (!isAuthenticated && isPublicRoute) {
+    return <PublicRoutes />;
   }
 
   if (isAuthenticated) {
