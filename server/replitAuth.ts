@@ -163,6 +163,32 @@ export const requireSuperAdmin: RequestHandler = async (req, res, next) => {
   }
 };
 
+/**
+ * Helper function to check if a user has access to a specific organization
+ * Returns true if user has access, false otherwise
+ */
+export async function checkUserOrgAccess(
+  userId: string,
+  orgId: string,
+  allowedRoles: string[] = ["SUPER_ADMIN", "ORG_ADMIN", "VIEWER"]
+): Promise<boolean> {
+  const userWithRoles = await storage.getUserWithRoles(userId);
+  
+  if (!userWithRoles) {
+    return false;
+  }
+  
+  // Super admins have access to all organizations
+  if (userWithRoles.isSuperAdmin) {
+    return true;
+  }
+  
+  // Check if user has the required role for this organization
+  return userWithRoles.roles.some(
+    (role: any) => role.orgId === orgId && allowedRoles.includes(role.role)
+  );
+}
+
 export const requireOrgAccess = (allowedRoles: string[] = ["SUPER_ADMIN", "ORG_ADMIN"]): RequestHandler => {
   return async (req, res, next) => {
     try {
@@ -174,23 +200,9 @@ export const requireOrgAccess = (allowedRoles: string[] = ["SUPER_ADMIN", "ORG_A
         return res.status(400).json({ message: "Organization ID is required" });
       }
       
-      const userWithRoles = await storage.getUserWithRoles(user.claims.sub);
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, orgId, allowedRoles);
       
-      if (!userWithRoles) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-      
-      // Super admins have access to all organizations
-      if (userWithRoles.isSuperAdmin) {
-        return next();
-      }
-      
-      // Check if user has the required role for this organization
-      const hasOrgAccess = userWithRoles.roles.some(
-        (role: any) => role.orgId === orgId && allowedRoles.includes(role.role)
-      );
-      
-      if (!hasOrgAccess) {
+      if (!hasAccess) {
         return res.status(403).json({ message: "Forbidden: You do not have access to this organization" });
       }
       

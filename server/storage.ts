@@ -80,6 +80,7 @@ export interface IStorage {
 
   // Teams
   getTeamsByTournament(tournamentId: string): Promise<Team[]>;
+  getTeamById(id: string): Promise<Team | undefined>;
   createTeam(team: InsertTeam): Promise<Team>;
   createTeams(teams: InsertTeam[]): Promise<Team[]>;
   updateTeam(id: string, team: Partial<InsertTeam>): Promise<Team | undefined>;
@@ -94,6 +95,7 @@ export interface IStorage {
   // Players
   getPlayersByOrg(orgId: string): Promise<PlayerRegistry[]>;
   getPlayerById(id: string): Promise<PlayerRegistry | undefined>;
+  getPlayerByUpid(upid: string): Promise<PlayerRegistry | undefined>;
   searchPlayers(orgId: string, query: string): Promise<PlayerRegistry[]>;
   findDuplicatePlayers(orgId: string, hashedIdentityKeys: string): Promise<PlayerRegistry[]>;
   createPlayer(player: InsertPlayerRegistry): Promise<PlayerRegistry>;
@@ -101,6 +103,7 @@ export interface IStorage {
   
   // Player Documents
   getPlayerDocuments(upid: string): Promise<PlayerDocument[]>;
+  getPlayerDocumentById(id: string): Promise<PlayerDocument | undefined>;
   getDocumentsByOrg(orgId: string, verified?: boolean): Promise<any[]>;
   createPlayerDocument(document: InsertPlayerDocument): Promise<PlayerDocument>;
   updatePlayerDocument(id: string, document: Partial<InsertPlayerDocument>): Promise<PlayerDocument | undefined>;
@@ -115,6 +118,7 @@ export interface IStorage {
 
   // Roster Members
   getRosterMembersByTeam(teamId: string): Promise<any[]>;
+  getRosterMemberById(id: string): Promise<RosterMember | undefined>;
   getRosterMembersByTournament(tournamentId: string): Promise<any[]>;
   createRosterMember(rosterMember: InsertRosterMember): Promise<RosterMember>;
   updateRosterMember(id: string, rosterMember: Partial<InsertRosterMember>): Promise<RosterMember | undefined>;
@@ -326,6 +330,14 @@ export class DbStorage implements IStorage {
       .where(eq(teams.tournamentId, tournamentId));
   }
 
+  async getTeamById(id: string): Promise<Team | undefined> {
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, id));
+    return team;
+  }
+
   async createTeam(team: InsertTeam): Promise<Team> {
     const [created] = await db.insert(teams).values(team).returning();
     return created;
@@ -431,6 +443,15 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
+  async getPlayerByUpid(upid: string): Promise<PlayerRegistry | undefined> {
+    const result = await db
+      .select()
+      .from(playerRegistry)
+      .where(eq(playerRegistry.id, upid))
+      .limit(1);
+    return result[0];
+  }
+
   async searchPlayers(orgId: string, query: string): Promise<PlayerRegistry[]> {
     return await db
       .select()
@@ -482,6 +503,14 @@ export class DbStorage implements IStorage {
       .from(playerDocuments)
       .where(eq(playerDocuments.upid, upid))
       .orderBy(desc(playerDocuments.createdAt));
+  }
+
+  async getPlayerDocumentById(id: string): Promise<PlayerDocument | undefined> {
+    const [doc] = await db
+      .select()
+      .from(playerDocuments)
+      .where(eq(playerDocuments.id, id));
+    return doc;
   }
 
   async getDocumentsByOrg(orgId: string, verified?: boolean): Promise<any[]> {
@@ -606,6 +635,14 @@ export class DbStorage implements IStorage {
         )
       )
       .orderBy(desc(rosterMembers.joinedAt));
+  }
+
+  async getRosterMemberById(id: string): Promise<RosterMember | undefined> {
+    const [member] = await db
+      .select()
+      .from(rosterMembers)
+      .where(eq(rosterMembers.id, id));
+    return member;
   }
 
   async getRosterMembersByTournament(tournamentId: string): Promise<any[]> {

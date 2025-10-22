@@ -217,6 +217,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!player) {
         return res.status(404).json({ error: "Player not found" });
       }
+      
+      // Check if user has access to this player's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, player.orgId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
       res.json(player);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -272,10 +281,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/players/:id", isAuthenticated, async (req, res) => {
     try {
-      const player = await storage.updatePlayer(req.params.id, req.body);
-      if (!player) {
+      // First get the player to check org access
+      const existingPlayer = await storage.getPlayerById(req.params.id);
+      if (!existingPlayer) {
         return res.status(404).json({ error: "Player not found" });
       }
+      
+      // Check if user has access to this player's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, existingPlayer.orgId, ["SUPER_ADMIN", "ORG_ADMIN"]);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
+      const player = await storage.updatePlayer(req.params.id, req.body);
       res.json(player);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -297,6 +317,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/players/:upid/documents", isAuthenticated, async (req, res) => {
     try {
+      // First get the player to check org access
+      const player = await storage.getPlayerByUpid(req.params.upid);
+      if (!player) {
+        return res.status(404).json({ error: "Player not found" });
+      }
+      
+      // Check if user has access to this player's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, player.orgId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
       const documents = await storage.getPlayerDocuments(req.params.upid);
       res.json(documents);
     } catch (error: any) {
@@ -306,6 +340,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/players/:upid/documents", isAuthenticated, async (req, res) => {
     try {
+      // First get the player to check org access
+      const player = await storage.getPlayerByUpid(req.params.upid);
+      if (!player) {
+        return res.status(404).json({ error: "Player not found" });
+      }
+      
+      // Check if user has access to this player's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, player.orgId, ["SUPER_ADMIN", "ORG_ADMIN"]);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
       const validatedData = insertPlayerDocumentSchema.parse({
         ...req.body,
         upid: req.params.upid
@@ -332,10 +380,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/player-documents/:id", isAuthenticated, async (req, res) => {
     try {
-      const document = await storage.updatePlayerDocument(req.params.id, req.body);
-      if (!document) {
+      // First get the document and player to check org access
+      const existingDoc = await storage.getPlayerDocumentById(req.params.id);
+      if (!existingDoc) {
         return res.status(404).json({ error: "Document not found" });
       }
+      
+      const player = await storage.getPlayerByUpid(existingDoc.upid);
+      if (!player) {
+        return res.status(404).json({ error: "Player not found" });
+      }
+      
+      // Check if user has access to this player's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, player.orgId, ["SUPER_ADMIN", "ORG_ADMIN"]);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
+      const document = await storage.updatePlayerDocument(req.params.id, req.body);
       res.json(document);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -344,6 +408,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/player-documents/:id", isAuthenticated, async (req, res) => {
     try {
+      // First get the document and player to check org access
+      const existingDoc = await storage.getPlayerDocumentById(req.params.id);
+      if (!existingDoc) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+      
+      const player = await storage.getPlayerByUpid(existingDoc.upid);
+      if (!player) {
+        return res.status(404).json({ error: "Player not found" });
+      }
+      
+      // Check if user has access to this player's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, player.orgId, ["SUPER_ADMIN", "ORG_ADMIN"]);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
       await storage.deletePlayerDocument(req.params.id);
       res.status(204).send();
     } catch (error: any) {
@@ -393,10 +476,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/tournament-players/:id", isAuthenticated, async (req, res) => {
     try {
-      const tournamentPlayer = await storage.updateTournamentPlayer(req.params.id, req.body);
-      if (!tournamentPlayer) {
+      // First get the tournament player to check org access
+      const existingTP = await storage.getTournamentPlayerById(req.params.id);
+      if (!existingTP) {
         return res.status(404).json({ error: "Tournament player not found" });
       }
+      
+      // Get tournament to check org access
+      const tournament = await storage.getTournamentById(existingTP.tournamentId);
+      if (!tournament) {
+        return res.status(404).json({ error: "Tournament not found" });
+      }
+      
+      // Check if user has access to this tournament's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, tournament.orgId, ["SUPER_ADMIN", "ORG_ADMIN"]);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
+      const tournamentPlayer = await storage.updateTournamentPlayer(req.params.id, req.body);
       res.json(tournamentPlayer);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -406,6 +506,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Roster Members
   app.get("/api/teams/:teamId/roster", isAuthenticated, async (req, res) => {
     try {
+      // First get the team to check org access
+      const team = await storage.getTeamById(req.params.teamId);
+      if (!team) {
+        return res.status(404).json({ error: "Team not found" });
+      }
+      
+      // Get tournament to check org access
+      const tournament = await storage.getTournamentById(team.tournamentId);
+      if (!tournament) {
+        return res.status(404).json({ error: "Tournament not found" });
+      }
+      
+      // Check if user has access to this tournament's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, tournament.orgId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
       const roster = await storage.getRosterMembersByTeam(req.params.teamId);
       res.json(roster);
     } catch (error: any) {
@@ -441,10 +561,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/roster-members/:id", isAuthenticated, async (req, res) => {
     try {
-      const rosterMember = await storage.updateRosterMember(req.params.id, req.body);
-      if (!rosterMember) {
+      // First get the roster member to check org access
+      const existingRM = await storage.getRosterMemberById(req.params.id);
+      if (!existingRM) {
         return res.status(404).json({ error: "Roster member not found" });
       }
+      
+      // Get team and tournament to check org access
+      const team = await storage.getTeamById(existingRM.teamId);
+      if (!team) {
+        return res.status(404).json({ error: "Team not found" });
+      }
+      
+      const tournament = await storage.getTournamentById(team.tournamentId);
+      if (!tournament) {
+        return res.status(404).json({ error: "Tournament not found" });
+      }
+      
+      // Check if user has access to this tournament's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, tournament.orgId, ["SUPER_ADMIN", "ORG_ADMIN"]);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
+      const rosterMember = await storage.updateRosterMember(req.params.id, req.body);
       res.json(rosterMember);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -547,6 +689,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/teams/:teamId/contracts", isAuthenticated, async (req, res) => {
     try {
+      // First get the team to check org access
+      const team = await storage.getTeamById(req.params.teamId);
+      if (!team) {
+        return res.status(404).json({ error: "Team not found" });
+      }
+      
+      // Get tournament to check org access
+      const tournament = await storage.getTournamentById(team.tournamentId);
+      if (!tournament) {
+        return res.status(404).json({ error: "Tournament not found" });
+      }
+      
+      // Check if user has access to this tournament's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, tournament.orgId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
       const contracts = await storage.getContractsByTeam(req.params.teamId);
       res.json(contracts);
     } catch (error: any) {
@@ -560,6 +722,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!contract) {
         return res.status(404).json({ error: "Contract not found" });
       }
+      
+      // Check if user has access to this contract's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, contract.orgId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
       res.json(contract);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -583,13 +754,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/contracts/:id", isAuthenticated, async (req, res) => {
     try {
+      // First get the contract to check org access
+      const existingContract = await storage.getContractById(req.params.id);
+      if (!existingContract) {
+        return res.status(404).json({ error: "Contract not found" });
+      }
+      
+      // Check if user has access to this contract's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, existingContract.orgId, ["SUPER_ADMIN", "ORG_ADMIN"]);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
       const { updateContractSchema } = await import("@shared/schema");
       const validatedData = updateContractSchema.parse(req.body);
       
       const contract = await storage.updateContract(req.params.id, validatedData);
-      if (!contract) {
-        return res.status(404).json({ error: "Contract not found" });
-      }
       res.json(contract);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -601,10 +783,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/contracts/:id", isAuthenticated, async (req, res) => {
     try {
-      const deleted = await storage.deleteContract(req.params.id);
-      if (!deleted) {
+      // First get the contract to check org access
+      const existingContract = await storage.getContractById(req.params.id);
+      if (!existingContract) {
         return res.status(404).json({ error: "Contract not found" });
       }
+      
+      // Check if user has access to this contract's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, existingContract.orgId, ["SUPER_ADMIN", "ORG_ADMIN"]);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
+      const deleted = await storage.deleteContract(req.params.id);
       res.status(204).send();
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -645,6 +838,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!transfer) {
         return res.status(404).json({ error: "Transfer not found" });
       }
+      
+      // Check if user has access to this transfer's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, transfer.orgId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
       res.json(transfer);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -668,13 +870,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/transfers/:id", isAuthenticated, async (req, res) => {
     try {
+      // First get the transfer to check org access
+      const existingTransfer = await storage.getTransferById(req.params.id);
+      if (!existingTransfer) {
+        return res.status(404).json({ error: "Transfer not found" });
+      }
+      
+      // Check if user has access to this transfer's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, existingTransfer.orgId, ["SUPER_ADMIN", "ORG_ADMIN"]);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
       const { updateTransferSchema } = await import("@shared/schema");
       const validatedData = updateTransferSchema.parse(req.body);
       
       const transfer = await storage.updateTransfer(req.params.id, validatedData);
-      if (!transfer) {
-        return res.status(404).json({ error: "Transfer not found" });
-      }
       res.json(transfer);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -686,10 +899,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/transfers/:id", isAuthenticated, async (req, res) => {
     try {
-      const deleted = await storage.deleteTransfer(req.params.id);
-      if (!deleted) {
+      // First get the transfer to check org access
+      const existingTransfer = await storage.getTransferById(req.params.id);
+      if (!existingTransfer) {
         return res.status(404).json({ error: "Transfer not found" });
       }
+      
+      // Check if user has access to this transfer's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, existingTransfer.orgId, ["SUPER_ADMIN", "ORG_ADMIN"]);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
+      const deleted = await storage.deleteTransfer(req.params.id);
       res.status(204).send();
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -730,6 +954,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!record) {
         return res.status(404).json({ error: "Disciplinary record not found" });
       }
+      
+      // Check if user has access to this record's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, record.orgId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
       res.json(record);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -753,10 +986,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/disciplinary-records/:id", isAuthenticated, async (req, res) => {
     try {
-      const record = await storage.updateDisciplinaryRecord(req.params.id, req.body);
-      if (!record) {
+      // First get the record to check org access
+      const existingRecord = await storage.getDisciplinaryRecordById(req.params.id);
+      if (!existingRecord) {
         return res.status(404).json({ error: "Disciplinary record not found" });
       }
+      
+      // Check if user has access to this record's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, existingRecord.orgId, ["SUPER_ADMIN", "ORG_ADMIN"]);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
+      const record = await storage.updateDisciplinaryRecord(req.params.id, req.body);
       res.json(record);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -765,10 +1009,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/disciplinary-records/:id", isAuthenticated, async (req, res) => {
     try {
-      const deleted = await storage.deleteDisciplinaryRecord(req.params.id);
-      if (!deleted) {
+      // First get the record to check org access
+      const existingRecord = await storage.getDisciplinaryRecordById(req.params.id);
+      if (!existingRecord) {
         return res.status(404).json({ error: "Disciplinary record not found" });
       }
+      
+      // Check if user has access to this record's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, existingRecord.orgId, ["SUPER_ADMIN", "ORG_ADMIN"]);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
+      const deleted = await storage.deleteDisciplinaryRecord(req.params.id);
       res.status(204).send();
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -795,6 +1050,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!tournament) {
         return res.status(404).json({ error: "Tournament not found" });
       }
+      
+      // Check if user has access to this tournament's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, tournament.orgId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
       res.json(tournament);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -807,6 +1071,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!tournament) {
         return res.status(404).json({ error: "Tournament not found" });
       }
+      
+      // Check if user has access to this tournament's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, tournament.orgId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
       res.json(tournament);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -828,10 +1101,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/tournaments/:id", isAuthenticated, async (req, res) => {
     try {
-      const tournament = await storage.updateTournament(req.params.id, req.body);
-      if (!tournament) {
+      // First get the tournament to check org access
+      const existingTournament = await storage.getTournamentById(req.params.id);
+      if (!existingTournament) {
         return res.status(404).json({ error: "Tournament not found" });
       }
+      
+      // Check if user has access to this tournament's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, existingTournament.orgId, ["SUPER_ADMIN", "ORG_ADMIN"]);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
+      const tournament = await storage.updateTournament(req.params.id, req.body);
       res.json(tournament);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -840,6 +1124,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/tournaments/:id", isAuthenticated, async (req, res) => {
     try {
+      // First get the tournament to check org access
+      const existingTournament = await storage.getTournamentById(req.params.id);
+      if (!existingTournament) {
+        return res.status(404).json({ error: "Tournament not found" });
+      }
+      
+      // Check if user has access to this tournament's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, existingTournament.orgId, ["SUPER_ADMIN", "ORG_ADMIN"]);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
       await storage.deleteTournament(req.params.id);
       res.status(204).send();
     } catch (error: any) {
@@ -892,10 +1190,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/teams/:id", isAuthenticated, async (req, res) => {
     try {
-      const team = await storage.updateTeam(req.params.id, req.body);
-      if (!team) {
+      // First get the team to check org access
+      const existingTeam = await storage.getTeamById(req.params.id);
+      if (!existingTeam) {
         return res.status(404).json({ error: "Team not found" });
       }
+      
+      // Get tournament to check org access
+      const tournament = await storage.getTournamentById(existingTeam.tournamentId);
+      if (!tournament) {
+        return res.status(404).json({ error: "Tournament not found" });
+      }
+      
+      // Check if user has access to this tournament's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, tournament.orgId, ["SUPER_ADMIN", "ORG_ADMIN"]);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
+      const team = await storage.updateTeam(req.params.id, req.body);
       res.json(team);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -904,6 +1219,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/teams/:id", isAuthenticated, async (req, res) => {
     try {
+      // First get the team to check org access
+      const existingTeam = await storage.getTeamById(req.params.id);
+      if (!existingTeam) {
+        return res.status(404).json({ error: "Team not found" });
+      }
+      
+      // Get tournament to check org access
+      const tournament = await storage.getTournamentById(existingTeam.tournamentId);
+      if (!tournament) {
+        return res.status(404).json({ error: "Tournament not found" });
+      }
+      
+      // Check if user has access to this tournament's organization
+      const user = req.user as any;
+      const { checkUserOrgAccess } = await import("./replitAuth");
+      const hasAccess = await checkUserOrgAccess(user.claims.sub, tournament.orgId, ["SUPER_ADMIN", "ORG_ADMIN"]);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
+      }
+      
       await storage.deleteTeam(req.params.id);
       res.status(204).send();
     } catch (error: any) {
