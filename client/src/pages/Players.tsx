@@ -405,9 +405,9 @@ export default function Players() {
       { wch: 18 }, // Registration Date
     ];
 
-    // Generate filename with organization name and date
+    // Generate filename with organization name and timestamp
     const orgName = organizations?.find(o => o.id === orgId)?.name || "Organization";
-    const filename = `Player_Registry_${orgName}_${format(new Date(), "yyyy-MM-dd")}.xlsx`;
+    const filename = `Player_Registry_${orgName}_${format(new Date(), "yyyy-MM-dd_HHmm")}.xlsx`;
 
     // Download the file
     XLSX.writeFile(workbook, filename);
