@@ -24,6 +24,8 @@ import {
   type Transfer,
   type InsertTransfer,
   type UpdateTransfer,
+  type DisciplinaryRecord,
+  type InsertDisciplinaryRecord,
   tournaments,
   teams,
   matches,
@@ -44,6 +46,7 @@ import {
   eligibilityRules,
   contracts,
   transfers,
+  disciplinaryRecords,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, or, ilike, sql } from "drizzle-orm";
@@ -122,6 +125,15 @@ export interface IStorage {
   createTransfer(transfer: InsertTransfer): Promise<Transfer>;
   updateTransfer(id: string, transfer: UpdateTransfer): Promise<Transfer | undefined>;
   deleteTransfer(id: string): Promise<boolean>;
+
+  // Disciplinary Records
+  getDisciplinaryRecordsByPlayer(upid: string): Promise<DisciplinaryRecord[]>;
+  getDisciplinaryRecordsByOrg(orgId: string): Promise<DisciplinaryRecord[]>;
+  getDisciplinaryRecordsByTournament(tournamentId: string): Promise<DisciplinaryRecord[]>;
+  getDisciplinaryRecordById(id: string): Promise<DisciplinaryRecord | undefined>;
+  createDisciplinaryRecord(record: InsertDisciplinaryRecord): Promise<DisciplinaryRecord>;
+  updateDisciplinaryRecord(id: string, record: Partial<InsertDisciplinaryRecord>): Promise<DisciplinaryRecord | undefined>;
+  deleteDisciplinaryRecord(id: string): Promise<boolean>;
 
   // Reference Data
   getOrganizations(): Promise<Organization[]>;
@@ -662,6 +674,67 @@ export class DbStorage implements IStorage {
     const result = await db
       .delete(transfers)
       .where(eq(transfers.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Disciplinary Records
+  async getDisciplinaryRecordsByPlayer(upid: string): Promise<DisciplinaryRecord[]> {
+    return await db
+      .select()
+      .from(disciplinaryRecords)
+      .where(eq(disciplinaryRecords.upid, upid))
+      .orderBy(desc(disciplinaryRecords.incidentDate));
+  }
+
+  async getDisciplinaryRecordsByOrg(orgId: string): Promise<DisciplinaryRecord[]> {
+    return await db
+      .select()
+      .from(disciplinaryRecords)
+      .where(eq(disciplinaryRecords.orgId, orgId))
+      .orderBy(desc(disciplinaryRecords.incidentDate));
+  }
+
+  async getDisciplinaryRecordsByTournament(tournamentId: string): Promise<DisciplinaryRecord[]> {
+    return await db
+      .select()
+      .from(disciplinaryRecords)
+      .where(eq(disciplinaryRecords.tournamentId, tournamentId))
+      .orderBy(desc(disciplinaryRecords.incidentDate));
+  }
+
+  async getDisciplinaryRecordById(id: string): Promise<DisciplinaryRecord | undefined> {
+    const result = await db
+      .select()
+      .from(disciplinaryRecords)
+      .where(eq(disciplinaryRecords.id, id));
+    return result[0];
+  }
+
+  async createDisciplinaryRecord(record: InsertDisciplinaryRecord): Promise<DisciplinaryRecord> {
+    const result = await db
+      .insert(disciplinaryRecords)
+      .values(record)
+      .returning();
+    return result[0];
+  }
+
+  async updateDisciplinaryRecord(
+    id: string,
+    record: Partial<InsertDisciplinaryRecord>
+  ): Promise<DisciplinaryRecord | undefined> {
+    const result = await db
+      .update(disciplinaryRecords)
+      .set({ ...record, updatedAt: new Date() })
+      .where(eq(disciplinaryRecords.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteDisciplinaryRecord(id: string): Promise<boolean> {
+    const result = await db
+      .delete(disciplinaryRecords)
+      .where(eq(disciplinaryRecords.id, id))
       .returning();
     return result.length > 0;
   }
