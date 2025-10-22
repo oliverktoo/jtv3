@@ -50,7 +50,22 @@ Preferred communication style: Simple, everyday language.
 
 ### System Implementations
 
-**Authentication & Authorization**: Replit Auth (OpenID Connect) for OAuth, PostgreSQL session store, three-tier role hierarchy (SUPER_ADMIN, ORG_ADMIN, VIEWER), and authorization middleware for protected routes and access control.
+**Authentication & Authorization**: 
+
+*Infrastructure:* Replit Auth (OpenID Connect) for OAuth authentication via Google/GitHub/email, PostgreSQL session store with connect-pg-simple, three-tier role hierarchy (SUPER_ADMIN, ORG_ADMIN, VIEWER), and comprehensive authorization middleware system.
+
+*Security Model:* Three-layer security architecture:
+1. **Authentication Layer**: isAuthenticated middleware on ALL 63 API routes blocks unauthenticated access (401)
+2. **Organization Layer**: requireOrgAccess middleware on 14 organization-scoped routes (/api/organizations/:orgId/...) validates org membership (403)
+3. **Entity Layer**: Inline authorization on 25 critical ID-based routes (players, contracts, transfers, disciplinary, tournaments, player documents, teams, rosters, tournament players) uses checkUserOrgAccess helper to verify entity ownership before access
+
+*User Management:* SUPER_ADMIN can assign platform-wide or organization-specific roles to users via User Management page. Role assignments stored in userOrganizationRoles junction table with cascade delete protection. Landing page for logged-out users with seamless OAuth login flow.
+
+*Storage Helpers:* Added getPlayerByUpid, getPlayerDocumentById, getTeamById, getRosterMemberById to support entity-level authorization lookups.
+
+*Known Limitation:* ~15 remaining ID-based routes need inline authorization (documented for future enhancement).
+
+*Date Implemented:* October 22, 2025
 
 **Tournament Features**:
 - **Tournament Creation & Management**: Dialogs for creating tournaments and generating fixtures with configurable scheduling.
