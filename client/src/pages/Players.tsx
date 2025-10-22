@@ -15,7 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 import { usePlayers, useCreatePlayer } from "@/hooks/usePlayers";
 import { useOrganizations } from "@/hooks/useReferenceData";
 import { useToast } from "@/hooks/use-toast";
-import { insertPlayerRegistrySchema, type Contract, type Transfer } from "@shared/schema";
+import { insertPlayerRegistrySchema, type Contract, type Transfer, type DisciplinaryRecord } from "@shared/schema";
 import { format } from "date-fns";
 
 const createPlayerFormSchema = insertPlayerRegistrySchema.extend({
@@ -24,6 +24,105 @@ const createPlayerFormSchema = insertPlayerRegistrySchema.extend({
 });
 
 type CreatePlayerFormValues = z.infer<typeof createPlayerFormSchema>;
+
+function PlayerDisciplinary({ upid }: { upid: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  const { data: records, isLoading } = useQuery<DisciplinaryRecord[]>({
+    queryKey: ["/api/disciplinary-records", "player", upid],
+    queryFn: async () => {
+      const res = await fetch(`/api/disciplinary-records/player/${upid}`);
+      if (!res.ok) throw new Error("Failed to fetch disciplinary records");
+      return res.json();
+    },
+    enabled: isOpen,
+  });
+
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status) {
+      case "ACTIVE":
+        return "destructive";
+      case "SERVED":
+        return "secondary";
+      case "APPEALED":
+        return "default";
+      case "OVERTURNED":
+      case "CANCELLED":
+        return "outline";
+      default:
+        return "secondary";
+    }
+  };
+
+  const getIncidentTypeDisplay = (type: string) => {
+    switch (type) {
+      case "YELLOW_CARD":
+        return "Yellow Card";
+      case "RED_CARD":
+        return "Red Card";
+      case "SUSPENSION":
+        return "Suspension";
+      case "FINE":
+        return "Fine";
+      case "WARNING":
+        return "Warning";
+      case "MISCONDUCT":
+        return "Misconduct";
+      default:
+        return type;
+    }
+  };
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-between"
+          data-testid={`button-view-disciplinary-${upid}`}
+        >
+          <span>Disciplinary History</span>
+          {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-3">
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground text-center py-2">Loading disciplinary records...</p>
+        ) : !records || records.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-2">No disciplinary records found</p>
+        ) : (
+          <div className="space-y-2">
+            {records.map((record) => (
+              <div
+                key={record.id}
+                className="border rounded-md p-3 text-sm"
+                data-testid={`disciplinary-item-${record.id}`}
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="font-medium">{getIncidentTypeDisplay(record.incidentType)}</div>
+                  <Badge variant={getStatusBadgeVariant(record.status)} className="text-xs">
+                    {record.status}
+                  </Badge>
+                </div>
+                <div className="text-xs text-muted-foreground mb-1">{record.description}</div>
+                <div className="space-y-1 text-xs text-muted-foreground">
+                  <div>Date: {format(new Date(record.incidentDate), "MMM d, yyyy")}</div>
+                  {record.matchesSuspended && record.matchesSuspended > 0 && (
+                    <div>Suspension: {record.matchesSuspended} match{record.matchesSuspended !== 1 ? "es" : ""}</div>
+                  )}
+                  {record.fineAmount && record.fineAmount > 0 && (
+                    <div>Fine: KSh {record.fineAmount.toLocaleString()}</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 function PlayerContracts({ upid }: { upid: string }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -498,6 +597,7 @@ export default function Players() {
                 <div className="border-t mt-4 pt-4 space-y-2">
                   <PlayerContracts upid={player.id} />
                   <PlayerTransfers upid={player.id} />
+                  <PlayerDisciplinary upid={player.id} />
                 </div>
               </CardContent>
             </Card>
