@@ -29,9 +29,9 @@ function PlayerDisciplinary({ upid }: { upid: string }) {
   const [isOpen, setIsOpen] = useState(false);
   
   const { data: records, isLoading } = useQuery<DisciplinaryRecord[]>({
-    queryKey: ["/api/disciplinary-records", "player", upid],
+    queryKey: ["/api/players", upid, "disciplinary-records"],
     queryFn: async () => {
-      const res = await fetch(`/api/disciplinary-records/player/${upid}`);
+      const res = await fetch(`/api/players/${upid}/disciplinary-records`);
       if (!res.ok) throw new Error("Failed to fetch disciplinary records");
       return res.json();
     },

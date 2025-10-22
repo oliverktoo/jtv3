@@ -13,6 +13,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useOrganizations } from "@/hooks/useReferenceData";
+import { usePlayers } from "@/hooks/usePlayers";
 import { useToast } from "@/hooks/use-toast";
 import { insertDisciplinaryRecordSchema, type DisciplinaryRecord } from "@shared/schema";
 import { format } from "date-fns";
@@ -61,13 +62,6 @@ function useUpdateDisciplinaryRecord() {
       }
       queryClient.invalidateQueries({ queryKey: ["/api/disciplinary-records"] });
     },
-  });
-}
-
-function usePlayers(orgId: string) {
-  return useQuery<any[]>({
-    queryKey: ["/api/players", orgId],
-    enabled: !!orgId,
   });
 }
 
