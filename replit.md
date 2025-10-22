@@ -8,6 +8,20 @@ Jamii Tourney v3 is a multi-model tournament management platform designed for Ke
 
 ## Recent Changes
 
+**Phase 5.4-5.5: Tournament Creation & Reports** (October 22, 2025)
+- **Phase 5.4: Tournament Creation & Management**
+  - Connected CreateTournamentDialog to backend with useCreateTournament mutation
+  - Built GenerateFixturesDialog component with configurable scheduling (kickoff times, weekend-only, home/away legs)
+  - Enhanced TournamentDetail page with fixture generation UI, team management cards, and quick links to fixtures/standings
+  - Proper form validation, loading states, success/error feedback throughout
+  
+- **Phase 5.5: Reports & Analytics**
+  - Created comprehensive Reports page at `/reports` with 3 tabs: Player Statistics, Tournament Summary, Disciplinary Reports
+  - Built backend API endpoint GET `/api/organizations/:orgId/reports` with aggregated statistics
+  - Implemented Excel export functionality for all report types using XLSX library
+  - Reports include: Player counts by status/sex/nationality, tournament summaries with team/match counts, disciplinary records with sanction details
+  - Added Reports to sidebar navigation with FileBarChart icon
+
 **Phase 5.1-5.3: Advanced Tournament Features** (October 22, 2025)
 - **Phase 5.1: Eligibility Rules Engine**
   - Expanded eligibility_rule_type_enum with 8 comprehensive rule types (AGE_RANGE, DOCUMENT_VERIFIED, NO_ACTIVE_SUSPENSIONS, VALID_CONTRACT, NATIONALITY, GENDER, PLAYER_STATUS, GEOGRAPHIC)
