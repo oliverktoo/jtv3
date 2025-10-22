@@ -8,6 +8,27 @@ Jamii Tourney v3 is a multi-model tournament management platform designed for Ke
 
 ## Recent Changes
 
+**Phase 5.1-5.3: Advanced Tournament Features** (October 22, 2025)
+- **Phase 5.1: Eligibility Rules Engine**
+  - Expanded eligibility_rule_type_enum with 8 comprehensive rule types (AGE_RANGE, DOCUMENT_VERIFIED, NO_ACTIVE_SUSPENSIONS, VALID_CONTRACT, NATIONALITY, GENDER, PLAYER_STATUS, GEOGRAPHIC)
+  - Created EligibilityService with validation logic for all rule types, including age calculations, document verification checks, active suspension detection, contract validation, and nationality/gender filters
+  - Updated API endpoint POST `/api/tournaments/:tournamentId/check-eligibility` to use new service
+  - Built Eligibility page at `/eligibility` with rule viewing and player eligibility checking UI
+  - **Key Fix**: AGE_RANGE logic now correctly handles missing DOB when config.requireDob === false
+
+- **Phase 5.2: Tournament Player ID (TPID) System** (Verified Complete)
+  - TPID infrastructure already implemented with `tournament_players` and `roster_members` tables
+  - Storage methods: getTournamentPlayers, createTournamentPlayer, updateTournamentPlayer, findTournamentPlayer
+  - API endpoints: GET/POST `/api/tournaments/:tournamentId/players`, PATCH `/api/tournament-players/:id`
+  - Roster management: GET `/api/teams/:teamId/roster`, POST `/api/teams/:teamId/roster`, GET `/api/tournaments/:tournamentId/roster`
+  - UI: TeamRoster page manages tournament player registration and team rosters
+
+- **Phase 5.3: Team Management** (Completed)
+  - Team CRUD operations already implemented in storage (createTeam, createTeams, updateTeam, deleteTeam)
+  - API endpoints: POST `/api/tournaments/:tournamentId/teams`, POST `/api/tournaments/:tournamentId/teams/bulk`, PATCH `/api/teams/:id`, DELETE `/api/teams/:id`
+  - Created Teams page at `/teams` with organization/tournament filtering, team list view, and roster access
+  - Added Teams navigation link to sidebar
+
 **Phase 4.4: Excel Export Functionality** (October 22, 2025)
 - Implemented comprehensive Excel export across three main pages using XLSX library
 - Fixtures export: Includes tournament name, teams, scores, venue, date/time, status

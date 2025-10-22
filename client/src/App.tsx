@@ -19,6 +19,7 @@ import Transfers from "@/pages/Transfers";
 import Disciplinary from "@/pages/Disciplinary";
 import Documents from "@/pages/Documents";
 import Eligibility from "@/pages/Eligibility";
+import Teams from "@/pages/Teams";
 
 function Router() {
   return (
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/tournaments" component={Tournaments} />
       <Route path="/tournaments/:tournamentId" component={TournamentDetail} />
+      <Route path="/teams" component={Teams} />
       <Route path="/players" component={Players} />
       <Route path="/contracts" component={Contracts} />
       <Route path="/transfers" component={Transfers} />

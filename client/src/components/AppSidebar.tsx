@@ -16,6 +16,7 @@ import { Link, useLocation } from "wouter";
 const menuItems = [
   { title: "Dashboard", url: "/", icon: Home },
   { title: "Tournaments", url: "/tournaments", icon: Trophy },
+  { title: "Teams", url: "/teams", icon: Users },
   { title: "Players", url: "/players", icon: Users },
   { title: "Contracts", url: "/contracts", icon: FileText },
   { title: "Transfers", url: "/transfers", icon: ArrowRightLeft },
