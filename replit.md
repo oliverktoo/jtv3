@@ -6,6 +6,30 @@ Jamii Tourney v3 is a multi-model tournament management platform designed for Ke
 
 **Core Value Proposition**: A unified system that handles diverse tournament models with clear data isolation by organization and sport, predictable status lifecycles, and efficient fixture scheduling.
 
+## Recent Changes
+
+**Phase 3.3: Disciplinary Tracking** (October 22, 2025)
+- Implemented complete disciplinary records management system
+- Database schema: `disciplinary_records` table with incident types, sanctions, status lifecycle
+- Storage layer: 7 CRUD methods (create, get, update, delete, filter by player/org/tournament)
+- API endpoints: RESTful pattern at `/api/organizations/:orgId/disciplinary-records`, `/api/players/:upid/disciplinary-records`, `/api/tournaments/:tournamentId/disciplinary-records`
+- Frontend UI: Disciplinary page with list view, create/update dialogs, filtering by status, player name display
+- Player integration: Collapsible disciplinary history in Player detail cards
+- Cache invalidation: Proper query invalidation on mutations by organization and player
+- **Key Fix**: Resolved duplicate hook issue by importing `usePlayers` from `@/hooks/usePlayers`
+
+**Phase 3.2: Transfers Management** (Completed)
+- Transfer status lifecycle: PENDING → APPROVED → COMPLETED/REJECTED/CANCELLED
+- Transfer types: PERMANENT, LOAN, LOAN_RETURN
+- Flexible JSONB terms field for custom transfer conditions
+- UI with status badges, filtering, and proper cache management
+
+**Phase 3.1: Contracts Management** (Completed)
+- Contract status lifecycle: PENDING → ACTIVE → EXPIRED/TERMINATED
+- Contract types: PERMANENT, LOAN, TRIAL, SHORT_TERM
+- Tamper-evident audit trails with timestamps
+- UI with collapsible player history components
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
