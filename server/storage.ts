@@ -18,6 +18,9 @@ import {
   type InsertRosterMember,
   type EligibilityRule,
   type InsertEligibilityRule,
+  type Contract,
+  type InsertContract,
+  type UpdateContract,
   tournaments,
   teams,
   matches,
@@ -36,6 +39,7 @@ import {
   tournamentPlayers,
   rosterMembers,
   eligibilityRules,
+  contracts,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, or, ilike, sql } from "drizzle-orm";
@@ -95,6 +99,16 @@ export interface IStorage {
   createEligibilityRule(rule: InsertEligibilityRule): Promise<EligibilityRule>;
   updateEligibilityRule(id: string, rule: Partial<InsertEligibilityRule>): Promise<EligibilityRule | undefined>;
   deleteEligibilityRule(id: string): Promise<boolean>;
+
+  // Contracts
+  getContractsByOrg(orgId: string): Promise<Contract[]>;
+  getContractsByPlayer(upid: string): Promise<Contract[]>;
+  getContractsByTeam(teamId: string): Promise<Contract[]>;
+  getContractById(id: string): Promise<Contract | undefined>;
+  getActiveContractForPlayer(upid: string, teamId: string): Promise<Contract | undefined>;
+  createContract(contract: InsertContract): Promise<Contract>;
+  updateContract(id: string, contract: UpdateContract): Promise<Contract | undefined>;
+  deleteContract(id: string): Promise<boolean>;
 
   // Reference Data
   getOrganizations(): Promise<Organization[]>;
@@ -509,6 +523,76 @@ export class DbStorage implements IStorage {
     const result = await db
       .delete(eligibilityRules)
       .where(eq(eligibilityRules.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  async getContractsByOrg(orgId: string): Promise<Contract[]> {
+    return await db
+      .select()
+      .from(contracts)
+      .where(eq(contracts.orgId, orgId))
+      .orderBy(desc(contracts.createdAt));
+  }
+
+  async getContractsByPlayer(upid: string): Promise<Contract[]> {
+    return await db
+      .select()
+      .from(contracts)
+      .where(eq(contracts.upid, upid))
+      .orderBy(desc(contracts.createdAt));
+  }
+
+  async getContractsByTeam(teamId: string): Promise<Contract[]> {
+    return await db
+      .select()
+      .from(contracts)
+      .where(eq(contracts.teamId, teamId))
+      .orderBy(desc(contracts.createdAt));
+  }
+
+  async getContractById(id: string): Promise<Contract | undefined> {
+    const [contract] = await db
+      .select()
+      .from(contracts)
+      .where(eq(contracts.id, id))
+      .limit(1);
+    return contract;
+  }
+
+  async getActiveContractForPlayer(upid: string, teamId: string): Promise<Contract | undefined> {
+    const [contract] = await db
+      .select()
+      .from(contracts)
+      .where(
+        and(
+          eq(contracts.upid, upid),
+          eq(contracts.teamId, teamId),
+          eq(contracts.status, "ACTIVE")
+        )
+      )
+      .limit(1);
+    return contract;
+  }
+
+  async createContract(contract: InsertContract): Promise<Contract> {
+    const [created] = await db.insert(contracts).values(contract).returning();
+    return created;
+  }
+
+  async updateContract(id: string, contract: UpdateContract): Promise<Contract | undefined> {
+    const [updated] = await db
+      .update(contracts)
+      .set({ ...contract, updatedAt: new Date() })
+      .where(eq(contracts.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteContract(id: string): Promise<boolean> {
+    const result = await db
+      .delete(contracts)
+      .where(eq(contracts.id, id))
       .returning();
     return result.length > 0;
   }

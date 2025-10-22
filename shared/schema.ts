@@ -81,6 +81,20 @@ export const eligibilityRuleTypeEnum = pgEnum("eligibility_rule_type_enum", [
   "PLAYER_STATUS",
 ]);
 
+export const contractStatusEnum = pgEnum("contract_status_enum", [
+  "PENDING",
+  "ACTIVE",
+  "EXPIRED",
+  "TERMINATED",
+]);
+
+export const contractTypeEnum = pgEnum("contract_type_enum", [
+  "PERMANENT",
+  "LOAN",
+  "TRIAL",
+  "SHORT_TERM",
+]);
+
 // Core Tables
 export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -174,6 +188,21 @@ export const eligibilityRules = pgTable("eligibility_rules", {
   description: text("description"),
   config: jsonb("config").notNull(),
   isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const contracts = pgTable("contracts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  upid: uuid("upid").notNull().references(() => playerRegistry.id),
+  teamId: uuid("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
+  orgId: uuid("org_id").notNull().references(() => organizations.id),
+  contractType: contractTypeEnum("contract_type").notNull(),
+  status: contractStatusEnum("status").notNull().default("PENDING"),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date"),
+  terms: jsonb("terms"),
+  notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -381,6 +410,20 @@ export const updateEligibilityRuleSchema = createInsertSchema(eligibilityRules).
   updatedAt: true,
 }).partial();
 
+export const insertContractSchema = createInsertSchema(contracts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateContractSchema = createInsertSchema(contracts).omit({
+  id: true,
+  upid: true,
+  orgId: true,
+  createdAt: true,
+  updatedAt: true,
+}).partial();
+
 // Types
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type Organization = typeof organizations.$inferSelect;
@@ -427,3 +470,7 @@ export type Match = typeof matches.$inferSelect;
 export type InsertEligibilityRule = z.infer<typeof insertEligibilityRuleSchema>;
 export type UpdateEligibilityRule = z.infer<typeof updateEligibilityRuleSchema>;
 export type EligibilityRule = typeof eligibilityRules.$inferSelect;
+
+export type InsertContract = z.infer<typeof insertContractSchema>;
+export type UpdateContract = z.infer<typeof updateContractSchema>;
+export type Contract = typeof contracts.$inferSelect;
