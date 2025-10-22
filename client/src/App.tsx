@@ -17,6 +17,7 @@ import TeamRoster from "@/pages/TeamRoster";
 import Contracts from "@/pages/Contracts";
 import Transfers from "@/pages/Transfers";
 import Disciplinary from "@/pages/Disciplinary";
+import Documents from "@/pages/Documents";
 
 function Router() {
   return (
@@ -28,6 +29,7 @@ function Router() {
       <Route path="/contracts" component={Contracts} />
       <Route path="/transfers" component={Transfers} />
       <Route path="/disciplinary" component={Disciplinary} />
+      <Route path="/documents" component={Documents} />
       <Route path="/teams/:teamId/roster" component={TeamRoster} />
       <Route path="/fixtures" component={Fixtures} />
       <Route path="/standings" component={Standings} />

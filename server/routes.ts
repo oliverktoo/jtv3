@@ -233,6 +233,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Player Documents
+  app.get("/api/organizations/:orgId/documents", async (req, res) => {
+    try {
+      const verified = req.query.verified !== undefined
+        ? req.query.verified === 'true'
+        : undefined;
+      const documents = await storage.getDocumentsByOrg(req.params.orgId, verified);
+      res.json(documents);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/api/players/:upid/documents", async (req, res) => {
     try {
       const documents = await storage.getPlayerDocuments(req.params.upid);

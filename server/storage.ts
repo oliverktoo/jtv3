@@ -83,6 +83,7 @@ export interface IStorage {
   
   // Player Documents
   getPlayerDocuments(upid: string): Promise<PlayerDocument[]>;
+  getDocumentsByOrg(orgId: string, verified?: boolean): Promise<any[]>;
   createPlayerDocument(document: InsertPlayerDocument): Promise<PlayerDocument>;
   updatePlayerDocument(id: string, document: Partial<InsertPlayerDocument>): Promise<PlayerDocument | undefined>;
   deletePlayerDocument(id: string): Promise<boolean>;
@@ -374,6 +375,36 @@ export class DbStorage implements IStorage {
       .from(playerDocuments)
       .where(eq(playerDocuments.upid, upid))
       .orderBy(desc(playerDocuments.createdAt));
+  }
+
+  async getDocumentsByOrg(orgId: string, verified?: boolean): Promise<any[]> {
+    const conditions = [];
+    conditions.push(eq(playerRegistry.orgId, orgId));
+    
+    if (verified !== undefined) {
+      conditions.push(eq(playerDocuments.verified, verified));
+    }
+
+    const result = await db
+      .select({
+        id: playerDocuments.id,
+        upid: playerDocuments.upid,
+        docType: playerDocuments.docType,
+        docNumberHash: playerDocuments.docNumberHash,
+        documentPath: playerDocuments.documentPath,
+        verified: playerDocuments.verified,
+        verifiedAt: playerDocuments.verifiedAt,
+        uploadedBy: playerDocuments.uploadedBy,
+        createdAt: playerDocuments.createdAt,
+        playerFirstName: playerRegistry.firstName,
+        playerLastName: playerRegistry.lastName,
+      })
+      .from(playerDocuments)
+      .innerJoin(playerRegistry, eq(playerDocuments.upid, playerRegistry.id))
+      .where(and(...conditions))
+      .orderBy(desc(playerDocuments.createdAt));
+
+    return result;
   }
 
   async createPlayerDocument(document: InsertPlayerDocument): Promise<PlayerDocument> {

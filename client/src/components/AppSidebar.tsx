@@ -10,7 +10,7 @@ import {
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { Home, Trophy, Calendar, BarChart3, Users, Settings, FileText, ArrowRightLeft, AlertTriangle } from "lucide-react";
+import { Home, Trophy, Calendar, BarChart3, Users, Settings, FileText, ArrowRightLeft, AlertTriangle, FileCheck } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
 const menuItems = [
@@ -20,6 +20,7 @@ const menuItems = [
   { title: "Contracts", url: "/contracts", icon: FileText },
   { title: "Transfers", url: "/transfers", icon: ArrowRightLeft },
   { title: "Disciplinary", url: "/disciplinary", icon: AlertTriangle },
+  { title: "Documents", url: "/documents", icon: FileCheck },
   { title: "Fixtures", url: "/fixtures", icon: Calendar },
   { title: "Standings", url: "/standings", icon: BarChart3 },
   { title: "Settings", url: "/settings", icon: Settings },
