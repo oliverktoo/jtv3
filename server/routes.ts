@@ -404,13 +404,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Eligibility
   app.post("/api/tournaments/:tournamentId/check-eligibility", async (req, res) => {
     try {
-      const { upid } = req.body;
+      const { upid, teamId } = req.body;
       if (!upid) {
         return res.status(400).json({ error: "upid is required" });
       }
       
-      const { checkPlayerEligibility } = await import("./eligibilityEngine");
-      const result = await checkPlayerEligibility(upid, req.params.tournamentId);
+      const { EligibilityService } = await import("./eligibilityService");
+      const eligibilityService = new EligibilityService(storage);
+      const result = await eligibilityService.checkPlayerEligibility(upid, req.params.tournamentId, teamId);
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message });

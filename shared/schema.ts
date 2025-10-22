@@ -79,6 +79,11 @@ export const eligibilityRuleTypeEnum = pgEnum("eligibility_rule_type_enum", [
   "AGE_RANGE",
   "GEOGRAPHIC",
   "PLAYER_STATUS",
+  "DOCUMENT_VERIFIED",
+  "NO_ACTIVE_SUSPENSIONS",
+  "VALID_CONTRACT",
+  "NATIONALITY",
+  "GENDER",
 ]);
 
 export const contractStatusEnum = pgEnum("contract_status_enum", [
