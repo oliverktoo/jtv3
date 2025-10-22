@@ -74,6 +74,10 @@ Preferred communication style: Simple, everyday language.
 - Support for multiple tournament models via enum
 - Stage-based competition structure (LEAGUE, GROUP, KNOCKOUT)
 - Match scheduling with status tracking
+- **Player Identity System**: Universal Player ID (UPID) with secure document verification (Phase 3 North Star)
+- **Contracts Management**: Player-team contracts with status lifecycle (PENDING → ACTIVE → EXPIRED/TERMINATED), contract types (PERMANENT, LOAN, TRIAL, SHORT_TERM), and tamper-evident audit trails
+- **Transfers Management**: Player transfers between teams with status transitions (PENDING → APPROVED → COMPLETED/REJECTED/CANCELLED), transfer types (PERMANENT, LOAN, LOAN_RETURN), flexible JSONB terms field
+- **Disciplinary Tracking**: Incident records (YELLOW_CARD, RED_CARD, SUSPENSION, FINE, WARNING, MISCONDUCT) with status lifecycle (ACTIVE → SERVED/APPEALED/OVERTURNED/CANCELLED), sanctions tracking (matches suspended, fine amounts), and serving period management
 
 **Key Design Decisions**:
 - **Problem**: Platform must safely support multiple organizations and sports
