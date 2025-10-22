@@ -566,6 +566,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Disciplinary Records
+  app.get("/api/organizations/:orgId/disciplinary-records", async (req, res) => {
+    try {
+      const records = await storage.getDisciplinaryRecordsByOrg(req.params.orgId);
+      res.json(records);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/players/:upid/disciplinary-records", async (req, res) => {
+    try {
+      const records = await storage.getDisciplinaryRecordsByPlayer(req.params.upid);
+      res.json(records);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/tournaments/:tournamentId/disciplinary-records", async (req, res) => {
+    try {
+      const records = await storage.getDisciplinaryRecordsByTournament(req.params.tournamentId);
+      res.json(records);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/disciplinary-records/:id", async (req, res) => {
+    try {
+      const record = await storage.getDisciplinaryRecordById(req.params.id);
+      if (!record) {
+        return res.status(404).json({ error: "Disciplinary record not found" });
+      }
+      res.json(record);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/disciplinary-records", async (req, res) => {
+    try {
+      const { insertDisciplinaryRecordSchema } = await import("@shared/schema");
+      const validatedData = insertDisciplinaryRecordSchema.parse(req.body);
+      
+      const record = await storage.createDisciplinaryRecord(validatedData);
+      res.status(201).json(record);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/disciplinary-records/:id", async (req, res) => {
+    try {
+      const record = await storage.updateDisciplinaryRecord(req.params.id, req.body);
+      if (!record) {
+        return res.status(404).json({ error: "Disciplinary record not found" });
+      }
+      res.json(record);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/disciplinary-records/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteDisciplinaryRecord(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Disciplinary record not found" });
+      }
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Tournaments
   app.get("/api/tournaments", async (req, res) => {
     try {
