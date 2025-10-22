@@ -8,6 +8,14 @@ Jamii Tourney v3 is a multi-model tournament management platform designed for Ke
 
 ## Recent Changes
 
+**Phase 4.4: Excel Export Functionality** (October 22, 2025)
+- Implemented comprehensive Excel export across three main pages using XLSX library
+- Fixtures export: Includes tournament name, teams, scores, venue, date/time, status
+- Standings export: Includes team rankings with points, wins, draws, losses, goals for/against, goal difference
+- Players export: Includes UPID, names, date of birth, sex, nationality, status, registration date
+- Export features: Descriptive filenames with organization name and timestamp (yyyy-MM-dd_HHmm format), proper column widths for readability, disabled state when no data available, success toast notifications
+- Pattern consistency: All three exports follow the same implementation pattern for maintainability
+
 **Phase 4.3: Document Verification** (October 22, 2025)
 - Built admin document verification page at `/documents`
 - Storage method: `getDocumentsByOrg(orgId, verified?)` with JOIN to player_registry
