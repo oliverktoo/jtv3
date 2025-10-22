@@ -73,14 +73,12 @@ export default function Eligibility() {
 
   const checkEligibility = useMutation({
     mutationFn: async ({ upid, teamId }: { upid: string; teamId?: string }) => {
-      return await apiRequest<EligibilityCheckResult>(
+      const response = await apiRequest(
+        "POST",
         `/api/tournaments/${selectedTournament}/check-eligibility`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ upid, teamId }),
-        }
+        { upid, teamId }
       );
+      return await response.json() as EligibilityCheckResult;
     },
     onSuccess: (data) => {
       if (data.eligible) {
