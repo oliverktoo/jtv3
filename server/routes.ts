@@ -147,7 +147,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/sports", isAuthenticated, async (req, res) => {
+  // Public route - no authentication required
+  app.get("/api/sports", async (req, res) => {
     try {
       const sports = await storage.getSports();
       res.json(sports);
@@ -435,7 +436,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Tournament Players (TPID)
-  app.get("/api/tournaments/:tournamentId/players", isAuthenticated, async (req, res) => {
+  // Public route - no authentication required for viewing tournament players
+  app.get("/api/tournaments/:tournamentId/players", async (req, res) => {
     try {
       const players = await storage.getTournamentPlayers(req.params.tournamentId);
       res.json(players);
@@ -1044,42 +1046,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/tournaments/:id", isAuthenticated, async (req, res) => {
+  // Public route - no authentication required for viewing tournaments
+  app.get("/api/tournaments/:id", async (req, res) => {
     try {
       const tournament = await storage.getTournamentById(req.params.id);
       if (!tournament) {
         return res.status(404).json({ error: "Tournament not found" });
       }
-      
-      // Check if user has access to this tournament's organization
-      const user = req.user as any;
-      const { checkUserOrgAccess } = await import("./replitAuth");
-      const hasAccess = await checkUserOrgAccess(user.claims.sub, tournament.orgId);
-      if (!hasAccess) {
-        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
-      }
-      
       res.json(tournament);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/tournaments/slug/:slug", isAuthenticated, async (req, res) => {
+  // Public route - no authentication required for viewing tournaments by slug
+  app.get("/api/tournaments/slug/:slug", async (req, res) => {
     try {
       const tournament = await storage.getTournamentBySlug(req.params.slug);
       if (!tournament) {
         return res.status(404).json({ error: "Tournament not found" });
       }
-      
-      // Check if user has access to this tournament's organization
-      const user = req.user as any;
-      const { checkUserOrgAccess } = await import("./replitAuth");
-      const hasAccess = await checkUserOrgAccess(user.claims.sub, tournament.orgId);
-      if (!hasAccess) {
-        return res.status(403).json({ error: "Forbidden: You do not have access to this organization" });
-      }
-      
       res.json(tournament);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -1146,7 +1132,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Teams
-  app.get("/api/tournaments/:tournamentId/teams", isAuthenticated, async (req, res) => {
+  // Public route - no authentication required for viewing tournament teams
+  app.get("/api/tournaments/:tournamentId/teams", async (req, res) => {
     try {
       const teams = await storage.getTeamsByTournament(req.params.tournamentId);
       res.json(teams);
@@ -1247,7 +1234,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Matches
-  app.get("/api/tournaments/:tournamentId/matches", isAuthenticated, async (req, res) => {
+  // Public route - no authentication required for viewing tournament fixtures
+  app.get("/api/tournaments/:tournamentId/matches", async (req, res) => {
     try {
       const matches = await storage.getMatchesByTournament(req.params.tournamentId);
       res.json(matches);
@@ -1256,7 +1244,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/rounds/:roundId/matches", isAuthenticated, async (req, res) => {
+  // Public route - no authentication required for viewing round fixtures
+  app.get("/api/rounds/:roundId/matches", async (req, res) => {
     try {
       const matches = await storage.getMatchesByRound(req.params.roundId);
       res.json(matches);
@@ -1367,7 +1356,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Standings
-  app.get("/api/tournaments/:tournamentId/standings", isAuthenticated, async (req, res) => {
+  // Public route - no authentication required for viewing tournament standings
+  app.get("/api/tournaments/:tournamentId/standings", async (req, res) => {
     try {
       const { tournamentId } = req.params;
 
