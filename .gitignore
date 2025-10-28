@@ -1,6 +1,36 @@
+# Dependencies
 node_modules
+
+# Build output
 dist
 .DS_Store
 server/public
-vite.config.ts.*
 *.tar.gz
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Replit
+vite.config.ts.*
+.replit
+.local
+
+# Supabase
+.supabase
