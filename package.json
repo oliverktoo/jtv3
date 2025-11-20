@@ -7,6 +7,7 @@
     "dev": "vite",
     "dev:server": "node -r dotenv/config --loader ts-node/esm server/index.ts",
     "dev:server:working": "node -r dotenv/config server/working-server.mjs",
+    "start": "node server/working-server.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "check": "tsc"
