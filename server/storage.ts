@@ -53,9 +53,10 @@ import {
   disciplinaryRecords,
   users,
   userOrganizationRoles,
-} from "@shared/schema";
-import { db } from "./db";
-import { eq, and, desc, or, ilike, sql } from "drizzle-orm";
+  teamTournamentRegistrations,
+} from "../shared/schema.js";
+import { hybridQuery } from "./hybridDb.js";
+import { eq, and, desc, or, ilike, sql, isNotNull } from "drizzle-orm";
 
 export interface IStorage {
   // Users & Authentication
@@ -80,6 +81,7 @@ export interface IStorage {
 
   // Teams
   getTeamsByTournament(tournamentId: string): Promise<Team[]>;
+  getTeamsByOrganization(orgId: string, includeUnattached?: boolean): Promise<Team[]>;
   getTeamById(id: string): Promise<Team | undefined>;
   createTeam(team: InsertTeam): Promise<Team>;
   createTeams(teams: InsertTeam[]): Promise<Team[]>;
@@ -189,16 +191,17 @@ export class DbStorage implements IStorage {
   }
 
   async getUserWithRoles(id: string): Promise<any> {
-    const user = await this.getUser(id);
-    if (!user) return null;
-
-    const roles = await this.getUserRoles(id);
-    const isSuperAdmin = roles.some(r => r.role === "SUPER_ADMIN" && r.orgId === null);
-
+    // Return mock admin user since authentication is removed
     return {
-      ...user,
-      roles,
-      isSuperAdmin,
+      id: "1",
+      email: "admin@jamiitourney.com", 
+      firstName: "Admin",
+      lastName: "User",
+      profileImageUrl: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      roles: [],
+      isSuperAdmin: true,
     };
   }
 
@@ -243,34 +246,25 @@ export class DbStorage implements IStorage {
   }
 
   async getAllUsersWithRoles(): Promise<any[]> {
-    const allUsers = await db.select().from(users);
-    const usersWithRoles = await Promise.all(
-      allUsers.map(async (user) => {
-        const roles = await this.getUserRoles(user.id);
-        return {
-          ...user,
-          roles,
-        };
-      })
-    );
-    return usersWithRoles;
+    // Return empty array since authentication is removed
+    return [];
   }
 
   // Tournaments
   async getTournaments(orgId: string): Promise<Tournament[]> {
-    return await db
-      .select()
-      .from(tournaments)
-      .where(eq(tournaments.orgId, orgId))
-      .orderBy(desc(tournaments.createdAt));
+    return await hybridQuery(
+      tournaments,
+      (t) => t.select().from(tournaments).where(eq(tournaments.orgId, orgId)).orderBy(desc(tournaments.createdAt)),
+      `select * from tournaments where org_id = '${orgId}' order by created_at desc`
+    );
   }
 
   async getTournamentById(id: string): Promise<Tournament | undefined> {
-    const result = await db
-      .select()
-      .from(tournaments)
-      .where(eq(tournaments.id, id))
-      .limit(1);
+    const result = await hybridQuery(
+      tournaments,
+      (t) => t.select().from(tournaments).where(eq(tournaments.id, id)).limit(1),
+      `select * from tournaments where id = '${id}' limit 1`
+    );
     return result[0];
   }
 
@@ -324,10 +318,71 @@ export class DbStorage implements IStorage {
 
   // Teams
   async getTeamsByTournament(tournamentId: string): Promise<Team[]> {
-    return await db
-      .select()
-      .from(teams)
-      .where(eq(teams.tournamentId, tournamentId));
+    // With the new junction table, we need to join through teamTournamentRegistrations
+    return await hybridQuery(
+      teams,
+      (t) => t
+        .select({
+          id: teams.id,
+          name: teams.name,
+          createdAt: teams.createdAt,
+          updatedAt: teams.updatedAt,
+          orgId: teams.orgId,
+          managerId: teams.managerId,
+          clubName: teams.clubName,
+          maxPlayers: teams.maxPlayers,
+          contactEmail: teams.contactEmail,
+          contactPhone: teams.contactPhone,
+          homeVenue: teams.homeVenue,
+          logoUrl: teams.logoUrl,
+          description: teams.description,
+          foundedDate: teams.foundedDate,
+          countyId: teams.countyId,
+          subCountyId: teams.subCountyId,
+          wardId: teams.wardId
+        })
+        .from(teams)
+        .innerJoin(teamTournamentRegistrations, eq(teams.id, teamTournamentRegistrations.teamId))
+        .where(eq(teamTournamentRegistrations.tournamentId, tournamentId)),
+      `select t.* from teams t 
+       inner join team_tournament_registrations ttr on t.id = ttr.team_id 
+       where ttr.tournament_id = '${tournamentId}'`
+    );
+  }
+
+  async getTeamsByOrganization(orgId: string, includeUnattached: boolean = false): Promise<Team[]> {
+    if (includeUnattached) {
+      // Return all teams for this organization
+      return await db
+        .select()
+        .from(teams)
+        .where(eq(teams.orgId, orgId));
+    } else {
+      // Only return teams that are registered for tournaments
+      return await db
+        .select({
+          id: teams.id,
+          name: teams.name,
+          createdAt: teams.createdAt,
+          updatedAt: teams.updatedAt,
+          orgId: teams.orgId,
+          managerId: teams.managerId,
+          clubName: teams.clubName,
+          maxPlayers: teams.maxPlayers,
+          contactEmail: teams.contactEmail,
+          contactPhone: teams.contactPhone,
+          homeVenue: teams.homeVenue,
+          logoUrl: teams.logoUrl,
+          description: teams.description,
+          foundedDate: teams.foundedDate,
+          countyId: teams.countyId,
+          subCountyId: teams.subCountyId,
+          wardId: teams.wardId
+        })
+        .from(teams)
+        .innerJoin(teamTournamentRegistrations, eq(teams.id, teamTournamentRegistrations.teamId))
+        .where(eq(teams.orgId, orgId));
+    }
   }
 
   async getTeamById(id: string): Promise<Team | undefined> {
@@ -372,7 +427,8 @@ export class DbStorage implements IStorage {
       .from(matches)
       .leftJoin(teams, eq(matches.homeTeamId, teams.id))
       .leftJoin(rounds, eq(matches.roundId, rounds.id))
-      .where(eq(teams.tournamentId, tournamentId));
+      .leftJoin(stages, eq(rounds.stageId, stages.id))
+      .where(eq(stages.tournamentId, tournamentId));
     
     return result as any[];
   }
@@ -400,11 +456,19 @@ export class DbStorage implements IStorage {
 
   // Reference Data
   async getOrganizations(): Promise<Organization[]> {
-    return await db.select().from(organizations);
+    return await hybridQuery(
+      organizations,
+      (t) => t.select().from(organizations),
+      `select * from organizations`
+    );
   }
 
   async getSports(): Promise<Sport[]> {
-    return await db.select().from(sports);
+    return await hybridQuery(
+      sports,
+      (t) => t.select().from(sports),
+      `select * from sports`
+    );
   }
 
   async getCounties(): Promise<County[]> {
@@ -435,19 +499,18 @@ export class DbStorage implements IStorage {
   }
 
   async getPlayerById(id: string): Promise<PlayerRegistry | undefined> {
-    const result = await db
+    const [player] = await db
       .select()
       .from(playerRegistry)
-      .where(eq(playerRegistry.id, id))
-      .limit(1);
-    return result[0];
+      .where(eq(playerRegistry.id, parseInt(id)));
+    return player;
   }
 
   async getPlayerByUpid(upid: string): Promise<PlayerRegistry | undefined> {
     const result = await db
       .select()
       .from(playerRegistry)
-      .where(eq(playerRegistry.id, upid))
+      .where(eq(playerRegistry.upid, upid))
       .limit(1);
     return result[0];
   }
@@ -477,7 +540,7 @@ export class DbStorage implements IStorage {
       .where(
         and(
           eq(playerRegistry.orgId, orgId),
-          eq(playerRegistry.hashedIdentityKeys, hashedIdentityKeys)
+          eq(playerRegistry.identityKeyHash, hashedIdentityKeys)
         )
       );
   }
@@ -491,7 +554,7 @@ export class DbStorage implements IStorage {
     const [updated] = await db
       .update(playerRegistry)
       .set({ ...player, updatedAt: new Date() })
-      .where(eq(playerRegistry.id, id))
+      .where(eq(playerRegistry.id, parseInt(id)))
       .returning();
     return updated;
   }

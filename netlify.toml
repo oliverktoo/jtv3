@@ -2,6 +2,25 @@
   command = "npm run build"
   publish = "dist"
 
+[build.environment]
+  NODE_VERSION = "20"
+  # Add your backend URL here or in Netlify dashboard
+  # VITE_API_URL = "https://your-backend-url.com"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/api/fixtures/venues"
+  to = "/.netlify/functions/venues"
+  status = 200
+
+[[redirects]]
+  from = "/api/tournaments/:tournamentId/groups"
+  to = "/.netlify/functions/groups"
+  status = 200
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

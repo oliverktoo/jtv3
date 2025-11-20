@@ -1,5 +1,5 @@
-import { db } from "./db";
-import { eligibilityRules, playerRegistry, wards, subCounties, counties } from "@shared/schema";
+import { db } from "./db.js";
+import { eligibilityRules, playerRegistry, wards, subCounties, counties } from "../shared/schema.js";
 import { eq, and } from "drizzle-orm";
 
 export interface EligibilityCheckResult {

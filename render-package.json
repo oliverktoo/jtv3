@@ -1,0 +1,16 @@
+{
+  "name": "jamii-tourney-backend",
+  "type": "module",
+  "scripts": {
+    "start": "node server/working-server.mjs"
+  },
+  "dependencies": {
+    "express": "*",
+    "@supabase/supabase-js": "*",
+    "dotenv": "*",
+    "cors": "*"
+  },
+  "engines": {
+    "node": "20.x"
+  }
+}

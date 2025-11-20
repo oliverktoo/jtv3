@@ -21,10 +21,12 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileDown, Users, Trophy, AlertTriangle } from "lucide-react";
+import { FileDown, Users, Trophy, AlertTriangle, BarChart3, TrendingUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
 import { format } from "date-fns";
+import AdvancedAnalyticsDashboard from "@/components/AdvancedAnalyticsDashboard";
+import AnalyticsCharts from "@/components/AnalyticsCharts";
 
 interface PlayerStats {
   totalPlayers: number;
@@ -50,6 +52,7 @@ interface DisciplinaryStats {
 export default function Reports() {
   const { data: organizations } = useOrganizations();
   const [selectedOrg, setSelectedOrg] = useState<string>("");
+  const [activeView, setActiveView] = useState<"traditional" | "advanced">("advanced");
   const { toast } = useToast();
 
   const { data: playerStats, isLoading: isLoadingPlayers } = useQuery<PlayerStats>({
@@ -156,13 +159,36 @@ export default function Reports() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold">Reports & Analytics</h1>
-        <p className="text-muted-foreground mt-1">
-          View comprehensive statistics and export reports
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Reports & Analytics</h1>
+          <p className="text-muted-foreground mt-1">
+            View comprehensive statistics and export reports
+          </p>
+        </div>
+        
+        {/* View Toggle */}
+        <div className="flex gap-2">
+          <Button 
+            variant={activeView === "advanced" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setActiveView("advanced")}
+          >
+            <BarChart3 className="w-4 h-4 mr-2" />
+            Advanced Analytics
+          </Button>
+          <Button 
+            variant={activeView === "traditional" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setActiveView("traditional")}
+          >
+            <TrendingUp className="w-4 h-4 mr-2" />
+            Traditional Reports
+          </Button>
+        </div>
       </div>
 
+      {/* Organization Selection */}
       <div className="max-w-md">
         <Label>Organization</Label>
         <Select value={selectedOrg} onValueChange={setSelectedOrg}>
@@ -174,7 +200,7 @@ export default function Reports() {
               <SelectItem key={org.id} value={org.id}>
                 {org.name}
               </SelectItem>
-            )) || []}
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -185,6 +211,8 @@ export default function Reports() {
             <p className="text-muted-foreground">Select an organization to view reports</p>
           </CardContent>
         </Card>
+      ) : activeView === "advanced" ? (
+        <AdvancedAnalyticsDashboard orgId={selectedOrg} />
       ) : (
         <Tabs defaultValue="players" className="space-y-6">
           <TabsList>

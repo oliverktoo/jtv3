@@ -1,4 +1,4 @@
-import type { Match, Team } from "@shared/schema";
+import type { Match, Team } from "../../shared/schema.js";
 
 export interface TeamStanding {
   teamId: string;

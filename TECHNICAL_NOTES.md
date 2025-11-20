@@ -1030,7 +1030,7 @@ Solution: Run `npm install`, check import paths
 
 ### Debug Checklist
 
-- [ ] Environment variables set correctly
+- [x] Environment variables set correctly
 - [ ] Database connection working
 - [ ] User has appropriate role/permissions
 - [ ] API route exists and is registered

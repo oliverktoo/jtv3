@@ -1,5 +1,5 @@
 import { addDays, setHours, setMinutes, format, getDay } from "date-fns";
-import type { InsertMatch } from "@shared/schema";
+import type { InsertMatch } from "../../shared/schema.js";
 
 export interface Team {
   id: string;

@@ -334,3 +334,37 @@
     inset: -1px;
   }
 }
+
+/* ATM Card Print Styles */
+@media print {
+  @page {
+    margin: 10mm;
+    size: A4;
+  }
+  
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+  }
+  
+  /* Grid layout for printing multiple cards per page */
+  .atm-card-print-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 85.6mm);
+    gap: 5mm;
+    justify-content: center;
+    align-content: start;
+    min-height: 100vh;
+  }
+  
+  /* Individual ATM card container */
+  .atm-card-print {
+    width: 85.6mm;
+    height: 53.98mm;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    border-radius: 4mm;
+    overflow: hidden;
+  }
+}

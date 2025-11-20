@@ -34,3 +34,6 @@ vite.config.ts.*
 
 # Supabase
 .supabase
+
+# Local Netlify folder
+.netlify

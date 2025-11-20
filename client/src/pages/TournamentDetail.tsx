@@ -3,8 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Calendar, MapPin, Trophy, Users, Plus, Pencil, Trash2 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ArrowLeft, Calendar, MapPin, Trophy, Users, Plus, Pencil, Trash2, Award, Settings } from "lucide-react";
 import GenerateFixturesDialog from "@/components/GenerateFixturesDialog";
+import TeamRegistrationManager from "@/components/TeamRegistrationManager";
+import { TournamentTeamManagement } from "@/components/TournamentTeamManagement";
 import { format } from "date-fns";
 import type { Tournament, EligibilityRule } from "@shared/schema";
 import { useState } from "react";
@@ -17,7 +20,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertEligibilityRuleSchema, type InsertEligibilityRule } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { supabase } from "../lib/supabase";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,18 +53,81 @@ const modelLabels: Record<string, string> = {
 
 export default function TournamentDetail() {
   const { tournamentId } = useParams();
+  console.log("TournamentDetail loaded with tournamentId:", tournamentId);
   const { toast } = useToast();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<EligibilityRule | null>(null);
   const [deletingRuleId, setDeletingRuleId] = useState<string | null>(null);
 
-  const { data: tournament, isLoading: isTournamentLoading } = useQuery<Tournament>({
-    queryKey: [`/api/tournaments/${tournamentId}`],
+  const { data: tournament, isLoading: isTournamentLoading, error: tournamentError } = useQuery<Tournament>({
+    queryKey: [`tournament-detail-${tournamentId}`],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('tournaments')
+        .select('*')
+        .eq('id', tournamentId)
+        .single();
+      
+      if (error) {
+        console.error("Tournament Supabase error:", error);
+        throw error;
+      }
+      
+      return {
+        id: data.id,
+        orgId: data.org_id,
+        sportId: data.sport_id,
+        name: data.name,
+        slug: data.slug,
+        season: data.season,
+        tournamentModel: data.tournament_model,
+        participationModel: data.participation_model || 'TEAM',
+        status: data.status,
+        federationType: data.federation_type,
+        startDate: data.start_date,
+        endDate: data.end_date,
+        countyId: data.county_id,
+        subCountyId: data.sub_county_id,
+        wardId: data.ward_id,
+        customRules: data.custom_rules,
+        leagueStructure: data.league_structure,
+        isPublished: data.is_published,
+        createdAt: new Date(data.created_at),
+        updatedAt: new Date(data.updated_at || data.created_at),
+      };
+    },
     enabled: !!tournamentId,
   });
 
-  const { data: eligibilityRules = [], isLoading: isRulesLoading } = useQuery<EligibilityRule[]>({
-    queryKey: [`/api/tournaments/${tournamentId}/eligibility-rules`],
+  console.log("Tournament data:", tournament);
+  console.log("Tournament loading:", isTournamentLoading);
+  console.log("Tournament error:", tournamentError);
+
+  const { data: eligibilityRules = [], isLoading: isRulesLoading } = useQuery({
+    queryKey: [`eligibility-rules-${tournamentId}`],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('eligibility_rules')
+        .select('*')
+        .eq('tournament_id', tournamentId);
+      
+      if (error) {
+        console.error("Eligibility rules Supabase error:", error);
+        throw error;
+      }
+      
+      return data.map((rule: any) => ({
+        id: rule.id,
+        tournamentId: rule.tournament_id,
+        ruleType: rule.rule_type,
+        name: rule.name,
+        description: rule.description,
+        config: rule.config,
+        isActive: rule.is_active,
+        createdAt: new Date(rule.created_at),
+        updatedAt: new Date(rule.updated_at || rule.created_at),
+      }));
+    },
     enabled: !!tournamentId,
   });
 
@@ -134,15 +201,35 @@ export default function TournamentDetail() {
         config: configData,
       };
       
-      const response = await apiRequest("POST", `/api/tournaments/${tournamentId}/eligibility-rules`, payload);
-      await response.json();
+      const { data: newRule, error } = await supabase
+        .from('eligibility_rules')
+        .insert({
+          tournament_id: tournamentId,
+          rule_type: payload.ruleType,
+          name: payload.name,
+          description: payload.description,
+          config: payload.config,
+          is_active: payload.isActive ?? true,
+        })
+        .select()
+        .single();
+      
+      if (error) {
+        console.error("Create eligibility rule error:", error);
+        toast({
+          title: "Error",
+          description: "Failed to create eligibility rule.",
+          variant: "destructive",
+        });
+        return;
+      }
       
       toast({
         title: "Rule created",
         description: "Eligibility rule has been created successfully.",
       });
       
-      queryClient.invalidateQueries({ queryKey: [`/api/tournaments/${tournamentId}/eligibility-rules`] });
+      queryClient.invalidateQueries({ queryKey: [`eligibility-rules-${tournamentId}`] });
       setIsCreateDialogOpen(false);
       setConfigData({});
       form.reset();
@@ -212,15 +299,35 @@ export default function TournamentDetail() {
         config: configData,
       };
       
-      const response = await apiRequest("PATCH", `/api/eligibility-rules/${editingRule.id}`, payload);
-      await response.json();
+      const { data: updatedRule, error } = await supabase
+        .from('eligibility_rules')
+        .update({
+          rule_type: payload.ruleType,
+          name: payload.name,
+          description: payload.description,
+          config: payload.config,
+          is_active: payload.isActive ?? true,
+        })
+        .eq('id', editingRule.id)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error("Update eligibility rule error:", error);
+        toast({
+          title: "Error",
+          description: "Failed to update eligibility rule.",
+          variant: "destructive",
+        });
+        return;
+      }
       
       toast({
         title: "Rule updated",
         description: "Eligibility rule has been updated successfully.",
       });
       
-      queryClient.invalidateQueries({ queryKey: [`/api/tournaments/${tournamentId}/eligibility-rules`] });
+      queryClient.invalidateQueries({ queryKey: [`eligibility-rules-${tournamentId}`] });
       setEditingRule(null);
       setConfigData({});
       form.reset();
@@ -235,14 +342,27 @@ export default function TournamentDetail() {
 
   const handleDeleteRule = async (ruleId: string) => {
     try {
-      await apiRequest("DELETE", `/api/eligibility-rules/${ruleId}`, undefined);
+      const { error } = await supabase
+        .from('eligibility_rules')
+        .delete()
+        .eq('id', ruleId);
+      
+      if (error) {
+        console.error("Delete eligibility rule error:", error);
+        toast({
+          title: "Error",
+          description: "Failed to delete eligibility rule.",
+          variant: "destructive",
+        });
+        return;
+      }
       
       toast({
         title: "Rule deleted",
         description: "Eligibility rule has been deleted successfully.",
       });
       
-      queryClient.invalidateQueries({ queryKey: [`/api/tournaments/${tournamentId}/eligibility-rules`] });
+      queryClient.invalidateQueries({ queryKey: [`eligibility-rules-${tournamentId}`] });
       setDeletingRuleId(null);
     } catch (error: any) {
       toast({
@@ -320,426 +440,484 @@ export default function TournamentDetail() {
         </Badge>
       </div>
 
-      <div className="flex gap-3 flex-wrap">
-        <GenerateFixturesDialog tournamentId={tournament.id} />
-        <Link href={`/fixtures?tournamentId=${tournament.id}`}>
-          <Button variant="outline" data-testid="button-view-fixtures">
-            <Calendar className="h-4 w-4 mr-2" />
-            View Fixtures
-          </Button>
-        </Link>
-        <Link href={`/teams?tournamentId=${tournament.id}`}>
-          <Button variant="outline" data-testid="button-manage-teams">
-            <Users className="h-4 w-4 mr-2" />
-            Manage Teams
-          </Button>
-        </Link>
-      </div>
+      <Tabs defaultValue="overview" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="overview">
+            <Trophy className="w-4 h-4 mr-2" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="teams">
+            <Users className="w-4 h-4 mr-2" />
+            Teams
+          </TabsTrigger>
+          <TabsTrigger value="fixtures">
+            <Calendar className="w-4 h-4 mr-2" />
+            Fixtures
+          </TabsTrigger>
+          <TabsTrigger value="eligibility">
+            <Settings className="w-4 h-4 mr-2" />
+            Eligibility
+          </TabsTrigger>
+        </TabsList>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Tournament Details</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">Model:</span>
-              <span>{modelLabels[tournament.tournamentModel]}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">Dates:</span>
-              <span className="font-mono">
-                {format(new Date(tournament.startDate), "MMM d, yyyy")} - {format(new Date(tournament.endDate), "MMM d, yyyy")}
-              </span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Eligibility Rules</CardTitle>
-            <Dialog open={isCreateDialogOpen} onOpenChange={(open) => { setIsCreateDialogOpen(open); if (!open) { setSelectedRuleType("AGE_RANGE"); setConfigData({}); } }}>
-              <DialogTrigger asChild>
-                <Button size="sm" data-testid="button-create-rule">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Rule
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Create Eligibility Rule</DialogTitle>
-                </DialogHeader>
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(handleCreateRule)} className="space-y-4">
-                    <FormField
-                      control={form.control}
-                      name="name"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Rule Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="e.g., Under 18 Age Limit" {...field} data-testid="input-rule-name" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="description"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Description</FormLabel>
-                          <FormControl>
-                            <Textarea 
-                              placeholder="Describe this eligibility rule..." 
-                              {...field} 
-                              value={field.value || ""}
-                              data-testid="input-rule-description"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="ruleType"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Rule Type</FormLabel>
-                          <Select onValueChange={(value) => { 
-                            field.onChange(value); 
-                            setSelectedRuleType(value); 
-                            setConfigData(value === "GEOGRAPHIC" ? { scope: "COUNTY" } : {}); 
-                          }} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger data-testid="select-rule-type">
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="AGE_RANGE">Age Range</SelectItem>
-                              <SelectItem value="GEOGRAPHIC">Geographic</SelectItem>
-                              <SelectItem value="PLAYER_STATUS">Player Status</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    {selectedRuleType === "AGE_RANGE" && (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <FormLabel>Minimum Age</FormLabel>
-                          <Input
-                            type="number"
-                            placeholder="e.g., 16"
-                            value={configData.minAge || ""}
-                            onChange={(e) => setConfigData({ ...configData, minAge: e.target.value ? parseInt(e.target.value) : undefined })}
-                            data-testid="input-min-age"
-                          />
-                        </div>
-                        <div>
-                          <FormLabel>Maximum Age</FormLabel>
-                          <Input
-                            type="number"
-                            placeholder="e.g., 18"
-                            value={configData.maxAge || ""}
-                            onChange={(e) => setConfigData({ ...configData, maxAge: e.target.value ? parseInt(e.target.value) : undefined })}
-                            data-testid="input-max-age"
-                          />
-                        </div>
-                        <div className="col-span-2">
-                          <FormLabel>Age Calculation Date (optional)</FormLabel>
-                          <Input
-                            type="date"
-                            value={configData.ageCalculationDate || ""}
-                            onChange={(e) => setConfigData({ ...configData, ageCalculationDate: e.target.value })}
-                            data-testid="input-age-calculation-date"
-                          />
-                        </div>
-                      </div>
-                    )}
-                    
-                    {selectedRuleType === "GEOGRAPHIC" && (
-                      <div className="space-y-3">
-                        <div>
-                          <FormLabel>Geographic Scope</FormLabel>
-                          <Select 
-                            value={configData.scope || "COUNTY"} 
-                            onValueChange={(value) => setConfigData({ ...configData, scope: value })}
-                          >
-                            <SelectTrigger data-testid="select-geographic-scope">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="COUNTY">County</SelectItem>
-                              <SelectItem value="SUBCOUNTY">Sub-County</SelectItem>
-                              <SelectItem value="WARD">Ward</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <FormLabel>Allowed IDs (comma-separated)</FormLabel>
-                          <Input
-                            placeholder="e.g., id-1, id-2, id-3"
-                            value={configData.allowedIds?.join(", ") || ""}
-                            onChange={(e) => setConfigData({ ...configData, allowedIds: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })}
-                            data-testid="input-allowed-ids"
-                          />
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Enter {configData.scope === "COUNTY" ? "county" : configData.scope === "SUBCOUNTY" ? "sub-county" : "ward"} IDs separated by commas
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {selectedRuleType === "PLAYER_STATUS" && (
-                      <div>
-                        <FormLabel>Allowed Player Statuses (comma-separated)</FormLabel>
-                        <Input
-                          placeholder="e.g., ACTIVE, REGISTERED"
-                          value={configData.allowedStatuses?.join(", ") || ""}
-                          onChange={(e) => setConfigData({ ...configData, allowedStatuses: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })}
-                          data-testid="input-allowed-statuses"
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">Common statuses: ACTIVE, REGISTERED, SUSPENDED, etc.</p>
-                      </div>
-                    )}
-                    
-                    <div className="flex justify-end gap-2">
-                      <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} data-testid="button-cancel">
-                        Cancel
-                      </Button>
-                      <Button type="submit" data-testid="button-submit">
-                        Create Rule
-                      </Button>
-                    </div>
-                  </form>
-                </Form>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isRulesLoading ? (
-            <p className="text-muted-foreground">Loading rules...</p>
-          ) : eligibilityRules.length === 0 ? (
-            <div className="text-center py-8 border-2 border-dashed rounded-lg">
-              <p className="text-muted-foreground mb-2">No eligibility rules defined</p>
-              <p className="text-sm text-muted-foreground">Add rules to control which players can participate</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {eligibilityRules.map((rule) => (
-                <Card key={rule.id} className="hover-elevate" data-testid={`card-rule-${rule.id}`}>
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-semibold" data-testid={`text-rule-name-${rule.id}`}>{rule.name}</h4>
-                          <Badge variant="outline" className="text-xs">
-                            {rule.ruleType.replace("_", " ")}
-                          </Badge>
-                          {!rule.isActive && (
-                            <Badge variant="outline" className="text-xs bg-muted">
-                              Inactive
-                            </Badge>
-                          )}
-                        </div>
-                        {rule.description && (
-                          <p className="text-sm text-muted-foreground mb-2">{rule.description}</p>
-                        )}
-                        {renderConfigDetails(rule)}
-                      </div>
-                      <div className="flex gap-1">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => {
-                            setEditingRule(rule);
-                            setSelectedRuleType(rule.ruleType);
-                            setConfigData(rule.config || {});
-                            form.reset({
-                              ...rule,
-                              config: rule.config || {},
-                            });
-                          }}
-                          data-testid={`button-edit-rule-${rule.id}`}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => setDeletingRuleId(rule.id)}
-                          data-testid={`button-delete-rule-${rule.id}`}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Dialog open={!!editingRule} onOpenChange={(open) => { if (!open) { setEditingRule(null); setSelectedRuleType("AGE_RANGE"); setConfigData({}); } }}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Edit Eligibility Rule</DialogTitle>
-          </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleUpdateRule)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Rule Name</FormLabel>
-                    <FormControl>
-                      <Input {...field} data-testid="input-edit-rule-name" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Textarea {...field} value={field.value || ""} data-testid="input-edit-rule-description" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              {selectedRuleType === "AGE_RANGE" && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <FormLabel>Minimum Age</FormLabel>
-                    <Input
-                      type="number"
-                      placeholder="e.g., 16"
-                      value={configData.minAge || ""}
-                      onChange={(e) => setConfigData({ ...configData, minAge: e.target.value ? parseInt(e.target.value) : undefined })}
-                      data-testid="input-edit-min-age"
-                    />
-                  </div>
-                  <div>
-                    <FormLabel>Maximum Age</FormLabel>
-                    <Input
-                      type="number"
-                      placeholder="e.g., 18"
-                      value={configData.maxAge || ""}
-                      onChange={(e) => setConfigData({ ...configData, maxAge: e.target.value ? parseInt(e.target.value) : undefined })}
-                      data-testid="input-edit-max-age"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <FormLabel>Age Calculation Date (required)</FormLabel>
-                    <Input
-                      type="date"
-                      value={configData.ageCalculationDate || ""}
-                      onChange={(e) => setConfigData({ ...configData, ageCalculationDate: e.target.value })}
-                      data-testid="input-edit-age-calculation-date"
-                    />
-                  </div>
+        {/* Overview Tab */}
+        <TabsContent value="overview" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Tournament Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center gap-2">
+                  <Trophy className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">Model:</span>
+                  <span>{modelLabels[tournament.tournamentModel]}</span>
                 </div>
-              )}
-              
-              {selectedRuleType === "GEOGRAPHIC" && (
-                <div className="space-y-3">
-                  <div>
-                    <FormLabel>Geographic Scope</FormLabel>
-                    <Select 
-                      value={configData.scope || "COUNTY"} 
-                      onValueChange={(value) => setConfigData({ ...configData, scope: value })}
-                    >
-                      <SelectTrigger data-testid="select-edit-geographic-scope">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="COUNTY">County</SelectItem>
-                        <SelectItem value="SUBCOUNTY">Sub-County</SelectItem>
-                        <SelectItem value="WARD">Ward</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <FormLabel>Allowed IDs (comma-separated)</FormLabel>
-                    <Input
-                      placeholder="e.g., id-1, id-2, id-3"
-                      value={configData.allowedIds?.join(", ") || ""}
-                      onChange={(e) => setConfigData({ ...configData, allowedIds: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })}
-                      data-testid="input-edit-allowed-ids"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Enter {configData.scope === "COUNTY" ? "county" : configData.scope === "SUBCOUNTY" ? "sub-county" : "ward"} IDs separated by commas
-                    </p>
-                  </div>
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">Dates:</span>
+                  <span className="font-mono">
+                    {format(new Date(tournament.startDate), "MMM d, yyyy")} - {format(new Date(tournament.endDate), "MMM d, yyyy")}
+                  </span>
                 </div>
-              )}
-              
-              {selectedRuleType === "PLAYER_STATUS" && (
-                <div>
-                  <FormLabel>Allowed Player Statuses (comma-separated)</FormLabel>
-                  <Input
-                    placeholder="e.g., ACTIVE, REGISTERED"
-                    value={configData.allowedStatuses?.join(", ") || ""}
-                    onChange={(e) => setConfigData({ ...configData, allowedStatuses: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })}
-                    data-testid="input-edit-allowed-statuses"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">Common statuses: ACTIVE, REGISTERED, SUSPENDED, etc.</p>
-                </div>
-              )}
-              
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setEditingRule(null)} data-testid="button-edit-cancel">
-                  Cancel
-                </Button>
-                <Button type="submit" data-testid="button-edit-submit">
-                  Update Rule
-                </Button>
               </div>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      <AlertDialog open={!!deletingRuleId} onOpenChange={(open) => !open && setDeletingRuleId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Eligibility Rule</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this eligibility rule? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-delete-cancel">Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => deletingRuleId && handleDeleteRule(deletingRuleId)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              data-testid="button-delete-confirm"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        {/* Teams Tab */}
+        <TabsContent value="teams" className="space-y-6">
+          <TournamentTeamManagement 
+            tournament={{
+              id: tournament.id,
+              name: tournament.name,
+              tournament_model: tournament.tournamentModel,
+              county_id: tournament.countyId || undefined,
+              sub_county_id: tournament.subCountyId || undefined,
+              ward_id: tournament.wardId || undefined
+            }}
+          />
+          <TeamRegistrationManager
+            tournamentId={tournament.id}
+            orgId={tournament.orgId}
+            canManageRegistrations={true}
+          />
+        </TabsContent>
+
+        {/* Fixtures Tab */}
+        <TabsContent value="fixtures" className="space-y-6">
+          <div className="flex items-center gap-4 mb-6">
+            <GenerateFixturesDialog tournamentId={tournament.id} />
+            <Link href={`/fixtures?tournamentId=${tournament.id}`}>
+              <Button variant="outline" data-testid="button-view-fixtures">
+                <Calendar className="h-4 w-4 mr-2" />
+                View Full Fixtures
+              </Button>
+            </Link>
+          </div>
+          
+          <Card>
+            <CardHeader>
+              <CardTitle>Fixture Management</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-12 text-muted-foreground">
+                <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p className="text-lg mb-2">Fixture Management</p>
+                <p className="text-sm">
+                  Generate and manage tournament fixtures. Use the "Generate Fixtures" button to create match schedules automatically.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Eligibility Rules Tab */}
+        <TabsContent value="eligibility" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Eligibility Rules</CardTitle>
+                <Dialog open={isCreateDialogOpen} onOpenChange={(open) => { setIsCreateDialogOpen(open); if (!open) { setSelectedRuleType("AGE_RANGE"); setConfigData({}); } }}>
+                  <DialogTrigger asChild>
+                    <Button size="sm" data-testid="button-create-rule">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Rule
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                      <DialogTitle>Create Eligibility Rule</DialogTitle>
+                    </DialogHeader>
+                    <Form {...form}>
+                      <form onSubmit={form.handleSubmit(handleCreateRule)} className="space-y-4">
+                        <FormField
+                          control={form.control}
+                          name="name"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Rule Name</FormLabel>
+                              <FormControl>
+                                <Input placeholder="e.g., Under 18 Age Limit" {...field} data-testid="input-rule-name" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="description"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Description</FormLabel>
+                              <FormControl>
+                                <Textarea 
+                                  placeholder="Describe this eligibility rule..." 
+                                  {...field} 
+                                  value={field.value || ""}
+                                  data-testid="input-rule-description"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="ruleType"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Rule Type</FormLabel>
+                              <Select onValueChange={(value) => { 
+                                field.onChange(value); 
+                                setSelectedRuleType(value); 
+                                setConfigData(value === "GEOGRAPHIC" ? { scope: "COUNTY" } : {}); 
+                              }} defaultValue={field.value}>
+                                <FormControl>
+                                  <SelectTrigger data-testid="select-rule-type">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="AGE_RANGE">Age Range</SelectItem>
+                                  <SelectItem value="GEOGRAPHIC">Geographic</SelectItem>
+                                  <SelectItem value="PLAYER_STATUS">Player Status</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        {selectedRuleType === "AGE_RANGE" && (
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <FormLabel>Minimum Age</FormLabel>
+                              <Input
+                                type="number"
+                                placeholder="e.g., 16"
+                                value={configData.minAge || ""}
+                                onChange={(e) => setConfigData({ ...configData, minAge: e.target.value ? parseInt(e.target.value) : undefined })}
+                                data-testid="input-min-age"
+                              />
+                            </div>
+                            <div>
+                              <FormLabel>Maximum Age</FormLabel>
+                              <Input
+                                type="number"
+                                placeholder="e.g., 18"
+                                value={configData.maxAge || ""}
+                                onChange={(e) => setConfigData({ ...configData, maxAge: e.target.value ? parseInt(e.target.value) : undefined })}
+                                data-testid="input-max-age"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <FormLabel>Age Calculation Date (optional)</FormLabel>
+                              <Input
+                                type="date"
+                                value={configData.ageCalculationDate || ""}
+                                onChange={(e) => setConfigData({ ...configData, ageCalculationDate: e.target.value })}
+                                data-testid="input-age-calculation-date"
+                              />
+                            </div>
+                          </div>
+                        )}
+                        
+                        {selectedRuleType === "GEOGRAPHIC" && (
+                          <div className="space-y-3">
+                            <div>
+                              <FormLabel>Geographic Scope</FormLabel>
+                              <Select 
+                                value={configData.scope || "COUNTY"} 
+                                onValueChange={(value) => setConfigData({ ...configData, scope: value })}
+                              >
+                                <SelectTrigger data-testid="select-geographic-scope">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="COUNTY">County</SelectItem>
+                                  <SelectItem value="SUBCOUNTY">Sub-County</SelectItem>
+                                  <SelectItem value="WARD">Ward</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <FormLabel>Allowed IDs (comma-separated)</FormLabel>
+                              <Input
+                                placeholder="e.g., id-1, id-2, id-3"
+                                value={configData.allowedIds?.join(", ") || ""}
+                                onChange={(e) => setConfigData({ ...configData, allowedIds: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })}
+                                data-testid="input-allowed-ids"
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Enter {configData.scope === "COUNTY" ? "county" : configData.scope === "SUBCOUNTY" ? "sub-county" : "ward"} IDs separated by commas
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {selectedRuleType === "PLAYER_STATUS" && (
+                          <div>
+                            <FormLabel>Allowed Player Statuses (comma-separated)</FormLabel>
+                            <Input
+                              placeholder="e.g., ACTIVE, REGISTERED"
+                              value={configData.allowedStatuses?.join(", ") || ""}
+                              onChange={(e) => setConfigData({ ...configData, allowedStatuses: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })}
+                              data-testid="input-allowed-statuses"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">Common statuses: ACTIVE, REGISTERED, SUSPENDED, etc.</p>
+                          </div>
+                        )}
+                        
+                        <div className="flex justify-end gap-2">
+                          <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} data-testid="button-cancel">
+                            Cancel
+                          </Button>
+                          <Button type="submit" data-testid="button-submit">
+                            Create Rule
+                          </Button>
+                        </div>
+                      </form>
+                    </Form>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isRulesLoading ? (
+                <p className="text-muted-foreground">Loading rules...</p>
+              ) : eligibilityRules.length === 0 ? (
+                <div className="text-center py-8 border-2 border-dashed rounded-lg">
+                  <p className="text-muted-foreground mb-2">No eligibility rules defined</p>
+                  <p className="text-sm text-muted-foreground">Add rules to control which players can participate</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {eligibilityRules.map((rule) => (
+                    <Card key={rule.id} className="hover-elevate" data-testid={`card-rule-${rule.id}`}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="font-semibold" data-testid={`text-rule-name-${rule.id}`}>{rule.name}</h4>
+                              <Badge variant="outline" className="text-xs">
+                                {rule.ruleType.replace("_", " ")}
+                              </Badge>
+                              {!rule.isActive && (
+                                <Badge variant="outline" className="text-xs bg-muted">
+                                  Inactive
+                                </Badge>
+                              )}
+                            </div>
+                            {rule.description && (
+                              <p className="text-sm text-muted-foreground mb-2">{rule.description}</p>
+                            )}
+                            {renderConfigDetails(rule)}
+                          </div>
+                          <div className="flex gap-1">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => {
+                                setEditingRule(rule);
+                                setSelectedRuleType(rule.ruleType);
+                                setConfigData(rule.config || {});
+                                form.reset({
+                                  ...rule,
+                                  config: rule.config || {},
+                                });
+                              }}
+                              data-testid={`button-edit-rule-${rule.id}`}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => setDeletingRuleId(rule.id)}
+                              data-testid={`button-delete-rule-${rule.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Dialog open={!!editingRule} onOpenChange={(open) => { if (!open) { setEditingRule(null); setSelectedRuleType("AGE_RANGE"); setConfigData({}); } }}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Edit Eligibility Rule</DialogTitle>
+              </DialogHeader>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(handleUpdateRule)} className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Rule Name</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-edit-rule-name" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Description</FormLabel>
+                        <FormControl>
+                          <Textarea {...field} value={field.value || ""} data-testid="input-edit-rule-description" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  {selectedRuleType === "AGE_RANGE" && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <FormLabel>Minimum Age</FormLabel>
+                        <Input
+                          type="number"
+                          placeholder="e.g., 16"
+                          value={configData.minAge || ""}
+                          onChange={(e) => setConfigData({ ...configData, minAge: e.target.value ? parseInt(e.target.value) : undefined })}
+                          data-testid="input-edit-min-age"
+                        />
+                      </div>
+                      <div>
+                        <FormLabel>Maximum Age</FormLabel>
+                        <Input
+                          type="number"
+                          placeholder="e.g., 18"
+                          value={configData.maxAge || ""}
+                          onChange={(e) => setConfigData({ ...configData, maxAge: e.target.value ? parseInt(e.target.value) : undefined })}
+                          data-testid="input-edit-max-age"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <FormLabel>Age Calculation Date (required)</FormLabel>
+                        <Input
+                          type="date"
+                          value={configData.ageCalculationDate || ""}
+                          onChange={(e) => setConfigData({ ...configData, ageCalculationDate: e.target.value })}
+                          data-testid="input-edit-age-calculation-date"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  
+                  {selectedRuleType === "GEOGRAPHIC" && (
+                    <div className="space-y-3">
+                      <div>
+                        <FormLabel>Geographic Scope</FormLabel>
+                        <Select 
+                          value={configData.scope || "COUNTY"} 
+                          onValueChange={(value) => setConfigData({ ...configData, scope: value })}
+                        >
+                          <SelectTrigger data-testid="select-edit-geographic-scope">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="COUNTY">County</SelectItem>
+                            <SelectItem value="SUBCOUNTY">Sub-County</SelectItem>
+                            <SelectItem value="WARD">Ward</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <FormLabel>Allowed IDs (comma-separated)</FormLabel>
+                        <Input
+                          placeholder="e.g., id-1, id-2, id-3"
+                          value={configData.allowedIds?.join(", ") || ""}
+                          onChange={(e) => setConfigData({ ...configData, allowedIds: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })}
+                          data-testid="input-edit-allowed-ids"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Enter {configData.scope === "COUNTY" ? "county" : configData.scope === "SUBCOUNTY" ? "sub-county" : "ward"} IDs separated by commas
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {selectedRuleType === "PLAYER_STATUS" && (
+                    <div>
+                      <FormLabel>Allowed Player Statuses (comma-separated)</FormLabel>
+                      <Input
+                        placeholder="e.g., ACTIVE, REGISTERED"
+                        value={configData.allowedStatuses?.join(", ") || ""}
+                        onChange={(e) => setConfigData({ ...configData, allowedStatuses: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })}
+                        data-testid="input-edit-allowed-statuses"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Common statuses: ACTIVE, REGISTERED, SUSPENDED, etc.</p>
+                    </div>
+                  )}
+                  
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="outline" onClick={() => setEditingRule(null)} data-testid="button-edit-cancel">
+                      Cancel
+                    </Button>
+                    <Button type="submit" data-testid="button-edit-submit">
+                      Update Rule
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
+
+          <AlertDialog open={!!deletingRuleId} onOpenChange={(open) => !open && setDeletingRuleId(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Eligibility Rule</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete this eligibility rule? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel data-testid="button-delete-cancel">Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => deletingRuleId && handleDeleteRule(deletingRuleId)}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  data-testid="button-delete-confirm"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

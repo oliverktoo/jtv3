@@ -7,6 +7,7 @@ interface StatsPanelProps {
     value: string | number;
     icon: LucideIcon;
     color?: string;
+    subtitle?: string;
   }[];
 }
 
@@ -23,6 +24,9 @@ export default function StatsPanel({ stats }: StatsPanelProps) {
                 <p className="text-3xl font-bold" data-testid={`text-stat-value-${index}`}>
                   {stat.value}
                 </p>
+                {stat.subtitle && (
+                  <p className="text-xs text-muted-foreground mt-1">{stat.subtitle}</p>
+                )}
               </div>
               <div
                 className={`h-12 w-12 rounded-lg flex items-center justify-center ${

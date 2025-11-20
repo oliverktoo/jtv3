@@ -12,32 +12,50 @@ class ApiError extends Error {
   }
 }
 
-async function throwIfResNotOk(res: Response) {
-  if (!res.ok) {
-    let data: any;
-    try {
-      data = await res.json();
-    } catch {
-      data = await res.text() || res.statusText;
-    }
-    throw new ApiError(res.status, data);
-  }
-}
-
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
-): Promise<Response> {
-  const res = await fetch(url, {
+): Promise<any> {
+  // In production, use relative URLs (Netlify will route to functions)
+  // In development, use localhost:5000
+  const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const backendUrl = url.startsWith('http') 
+    ? url 
+    : isDevelopment 
+      ? `http://localhost:5000${url}`
+      : url; // Use relative URL in production
+  
+  const res = await fetch(backendUrl, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
 
-  await throwIfResNotOk(res);
-  return res;
+  // Clone the response to read the body multiple times if needed
+  const responseClone = res.clone();
+  
+  if (!res.ok) {
+    let errorData: any;
+    try {
+      errorData = await res.json();
+    } catch {
+      try {
+        errorData = await res.text();
+      } catch {
+        errorData = res.statusText;
+      }
+    }
+    throw new ApiError(res.status, errorData);
+  }
+
+  // Parse and return the response data from the cloned response
+  try {
+    return await responseClone.json();
+  } catch {
+    return await responseClone.text();
+  }
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
@@ -54,8 +72,28 @@ export const getQueryFn: <T>(options: {
       return null;
     }
 
-    await throwIfResNotOk(res);
-    return await res.json();
+    // Clone the response to read the body multiple times if needed
+    const responseClone = res.clone();
+    
+    if (!res.ok) {
+      let errorData: any;
+      try {
+        errorData = await res.json();
+      } catch {
+        try {
+          errorData = await res.text();
+        } catch {
+          errorData = res.statusText;
+        }
+      }
+      throw new ApiError(res.status, errorData);
+    }
+
+    try {
+      return await responseClone.json();
+    } catch {
+      return await responseClone.text();
+    }
   };
 
 export const queryClient = new QueryClient({

@@ -1,443 +1,72 @@
-import { useState, useEffect } from "react";
-import FixtureCard from "@/components/FixtureCard";
+import { useEffect } from "react";
+import { useLocation } from "wouter";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Download, Filter, Plus, Edit } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Badge } from "@/components/ui/badge";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { useOrganizations } from "@/hooks/useReferenceData";
-import { useTournaments } from "@/hooks/useTournaments";
-import { useMatches, useUpdateMatch } from "@/hooks/useMatches";
-import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
-import * as XLSX from "xlsx";
-
-const recordResultSchema = z.object({
-  homeScore: z.number().min(0, "Score must be 0 or greater"),
-  awayScore: z.number().min(0, "Score must be 0 or greater"),
-  status: z.enum(["SCHEDULED", "LIVE", "COMPLETED", "POSTPONED", "CANCELLED"]),
-});
-
-type RecordResultFormValues = z.infer<typeof recordResultSchema>;
+import { ArrowRight, Settings } from "lucide-react";
 
 export default function Fixtures() {
-  const [selectedOrgId, setSelectedOrgId] = useState("");
-  const [selectedTournamentId, setSelectedTournamentId] = useState("");
-  const [roundFilter, setRoundFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
-  const [selectedMatch, setSelectedMatch] = useState<any>(null);
-  const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
-  const { data: organizations } = useOrganizations();
-  const { data: tournaments } = useTournaments(selectedOrgId);
-  const { data: matchesData = [], isLoading } = useMatches(selectedTournamentId);
-  const updateMatch = useUpdateMatch(selectedTournamentId);
-
-  const form = useForm<RecordResultFormValues>({
-    resolver: zodResolver(recordResultSchema),
-    defaultValues: {
-      homeScore: 0,
-      awayScore: 0,
-      status: "COMPLETED",
-    },
-  });
-
-  // Initialize selectedOrgId when organizations load
+  // Auto-redirect after a short delay for better UX
   useEffect(() => {
-    if (organizations && organizations.length > 0 && !selectedOrgId) {
-      setSelectedOrgId(organizations[0].id);
-    }
-  }, [organizations, selectedOrgId]);
+    const timer = setTimeout(() => {
+      setLocation('/tournament-hub?tab=jamii-fixtures');
+    }, 2000);
 
-  // Initialize selectedTournamentId when tournaments load
-  useEffect(() => {
-    if (tournaments && tournaments.length > 0 && !selectedTournamentId) {
-      const activeTournament = tournaments.find((t) => t.status === "ACTIVE") || tournaments[0];
-      setSelectedTournamentId(activeTournament.id);
-    }
-  }, [tournaments, selectedTournamentId]);
+    return () => clearTimeout(timer);
+  }, [setLocation]);
 
-  const handleRecordResult = async (values: RecordResultFormValues) => {
-    if (!selectedMatch) return;
-
-    try {
-      await updateMatch.mutateAsync({
-        id: selectedMatch.match.id,
-        data: {
-          homeScore: values.homeScore,
-          awayScore: values.awayScore,
-          status: values.status,
-        },
-      });
-      
-      toast({
-        title: "Result recorded",
-        description: `Match result has been updated successfully.`,
-      });
-      
-      setIsRecordDialogOpen(false);
-      setSelectedMatch(null);
-      form.reset();
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to record match result.",
-        variant: "destructive",
-      });
-    }
+  const handleManualRedirect = () => {
+    setLocation('/tournament-hub?tab=jamii-fixtures');
   };
-
-  const openRecordDialog = (match: any) => {
-    setSelectedMatch(match);
-    form.reset({
-      homeScore: match.match.homeScore || 0,
-      awayScore: match.match.awayScore || 0,
-      status: match.match.status,
-    });
-    setIsRecordDialogOpen(true);
-  };
-
-  const handleExportToExcel = () => {
-    if (filteredFixtures.length === 0) {
-      toast({
-        title: "No data to export",
-        description: "There are no fixtures to export.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Prepare data for export
-    const exportData = filteredFixtures.map((fixture: any) => ({
-      "Round": fixture.round,
-      "Home Team": fixture.homeTeam,
-      "Away Team": fixture.awayTeam,
-      "Score": fixture.status === "COMPLETED" 
-        ? `${fixture.homeScore ?? 0} - ${fixture.awayScore ?? 0}` 
-        : "-",
-      "Kickoff": fixture.kickoff ? format(new Date(fixture.kickoff), "PPP p") : "TBD",
-      "Venue": fixture.venue || "TBD",
-      "Status": fixture.status,
-    }));
-
-    // Create worksheet and workbook
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Fixtures");
-
-    // Set column widths for better readability
-    worksheet['!cols'] = [
-      { wch: 15 }, // Round
-      { wch: 25 }, // Home Team
-      { wch: 25 }, // Away Team
-      { wch: 12 }, // Score
-      { wch: 25 }, // Kickoff
-      { wch: 20 }, // Venue
-      { wch: 12 }, // Status
-    ];
-
-    // Generate filename with tournament name and date
-    const tournamentName = tournaments?.find(t => t.id === selectedTournamentId)?.name || "Tournament";
-    const filename = `Fixtures_${tournamentName}_${format(new Date(), "yyyy-MM-dd")}.xlsx`;
-
-    // Download the file
-    XLSX.writeFile(workbook, filename);
-
-    toast({
-      title: "Export successful",
-      description: `Fixtures exported to ${filename}`,
-    });
-  };
-
-  // Transform matches data for FixtureCard
-  const fixtures = matchesData.map((m: any) => ({
-    id: m.match.id,
-    homeTeam: m.homeTeam?.name || "TBD",
-    awayTeam: m.awayTeam?.name || "TBD",
-    homeScore: m.match.homeScore,
-    awayScore: m.match.awayScore,
-    kickoff: m.match.kickoff,
-    venue: m.match.venue,
-    status: m.match.status,
-    round: m.round?.name || `Round ${m.round?.number || 1}`,
-    stage: "League",
-  }));
-
-  const filteredFixtures = fixtures.filter((fixture: any) => {
-    const matchesRound = roundFilter === "all" || fixture.round === roundFilter;
-    const matchesStatus = statusFilter === "all" || fixture.status === statusFilter;
-    return matchesRound && matchesStatus;
-  });
-
-  const rounds = Array.from(new Set(fixtures.map((f: any) => f.round)));
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">Loading fixtures...</p>
-      </div>
-    );
-  }
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Fixtures</h1>
-          <p className="text-muted-foreground mt-1">
-            View and manage match schedules
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            onClick={handleExportToExcel}
-            disabled={filteredFixtures.length === 0}
-            data-testid="button-export-fixtures"
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Export to Excel
-          </Button>
-        </div>
+    <div className="container mx-auto px-4 py-8 space-y-6">
+      <div className="text-center space-y-4">
+        <h1 className="text-3xl font-bold">Fixtures Management</h1>
+        <p className="text-muted-foreground text-lg">
+          Fixture management has been consolidated into the Tournament Hub for a better experience.
+        </p>
       </div>
 
-      <div className="flex gap-4 items-center flex-wrap">
-        <Select value={selectedOrgId} onValueChange={setSelectedOrgId}>
-          <SelectTrigger className="w-[220px]" data-testid="select-organization">
-            <SelectValue placeholder="Select organization" />
-          </SelectTrigger>
-          <SelectContent>
-            {organizations?.map((org) => (
-              <SelectItem key={org.id} value={org.id}>
-                {org.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={selectedTournamentId} onValueChange={setSelectedTournamentId}>
-          <SelectTrigger className="w-[220px]" data-testid="select-tournament">
-            <SelectValue placeholder="Select tournament" />
-          </SelectTrigger>
-          <SelectContent>
-            {tournaments?.map((tournament) => (
-              <SelectItem key={tournament.id} value={tournament.id}>
-                {tournament.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <Select value={roundFilter} onValueChange={setRoundFilter}>
-            <SelectTrigger className="w-[180px]" data-testid="select-filter-round">
-              <SelectValue placeholder="Filter by round" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Rounds</SelectItem>
-              {rounds.map((round) => (
-                <SelectItem key={round} value={round}>
-                  {round}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]" data-testid="select-filter-status">
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="SCHEDULED">Scheduled</SelectItem>
-            <SelectItem value="LIVE">Live</SelectItem>
-            <SelectItem value="COMPLETED">Completed</SelectItem>
-            <SelectItem value="POSTPONED">Postponed</SelectItem>
-            <SelectItem value="CANCELLED">Cancelled</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <div className="flex gap-2 ml-auto">
-          <Badge variant="outline" className="bg-chart-2/10 text-chart-2 border-chart-2/20">
-            {fixtures.filter((f: any) => f.status === "COMPLETED").length} Completed
-          </Badge>
-          <Badge variant="outline" className="bg-muted text-muted-foreground">
-            {fixtures.filter((f: any) => f.status === "SCHEDULED").length} Scheduled
-          </Badge>
-        </div>
-      </div>
-
-      {filteredFixtures.length === 0 && selectedTournamentId && (
-        <div className="text-center py-12 border-2 border-dashed rounded-lg">
-          <p className="text-muted-foreground mb-4">No fixtures found for this tournament</p>
-          <p className="text-sm text-muted-foreground">
-            Generate fixtures from the tournament detail page
-          </p>
-        </div>
-      )}
-
-      {!selectedTournamentId && (
-        <div className="text-center py-12 border-2 border-dashed rounded-lg">
-          <p className="text-muted-foreground">Select a tournament to view fixtures</p>
-        </div>
-      )}
-
-      <div className="space-y-4">
-        {filteredFixtures.map((fixture: any) => {
-          const matchData = matchesData.find((m: any) => m.match.id === fixture.id);
-          return (
-            <div key={fixture.id} className="relative group">
-              <FixtureCard {...fixture} onClick={() => {}} />
-              <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openRecordDialog(matchData);
-                  }}
-                  data-testid={`button-record-result-${fixture.id}`}
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Record Result
-                </Button>
-              </div>
+      <div className="flex justify-center">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="flex items-center justify-center gap-2">
+              <Settings className="h-5 w-5" />
+              Redirecting to Tournament Hub
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground text-center">
+              You'll be automatically redirected to the Tournament Hub where you can manage all fixtures with advanced features.
+            </p>
+            
+            <Button 
+              onClick={handleManualRedirect}
+              className="w-full"
+              size="lg"
+            >
+              Go to Tournament Hub
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Button>
+            
+            <div className="text-xs text-center text-muted-foreground">
+              Auto-redirecting in a moment...
             </div>
-          );
-        })}
+          </CardContent>
+        </Card>
       </div>
 
-      <Dialog open={isRecordDialogOpen} onOpenChange={setIsRecordDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Record Match Result</DialogTitle>
-          </DialogHeader>
-          {selectedMatch && (
-            <div className="mb-4">
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground mb-2">
-                  {selectedMatch.round?.name || `Round ${selectedMatch.round?.number}`}
-                </p>
-                <div className="flex items-center justify-center gap-4">
-                  <span className="font-semibold">{selectedMatch.homeTeam?.name || "TBD"}</span>
-                  <span className="text-muted-foreground">vs</span>
-                  <span className="font-semibold">{selectedMatch.awayTeam?.name || "TBD"}</span>
-                </div>
-                {selectedMatch.match.kickoff && (
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {format(new Date(selectedMatch.match.kickoff), "EEE, MMM d • HH:mm")}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleRecordResult)} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="homeScore"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Home Score</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min="0"
-                          {...field}
-                          onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                          data-testid="input-home-score"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="awayScore"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Away Score</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min="0"
-                          {...field}
-                          onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                          data-testid="input-away-score"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Match Status</FormLabel>
-                    <FormControl>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <SelectTrigger data-testid="select-match-status">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="SCHEDULED">Scheduled</SelectItem>
-                          <SelectItem value="LIVE">Live</SelectItem>
-                          <SelectItem value="COMPLETED">Completed</SelectItem>
-                          <SelectItem value="POSTPONED">Postponed</SelectItem>
-                          <SelectItem value="CANCELLED">Cancelled</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsRecordDialogOpen(false)}
-                  data-testid="button-cancel-result"
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" data-testid="button-submit-result">
-                  Save Result
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+      <div className="text-center space-y-2">
+        <h3 className="font-semibold">Why the change?</h3>
+        <div className="text-sm text-muted-foreground max-w-2xl mx-auto space-y-1">
+          <p>• All fixture management features are now centralized in one place</p>
+          <p>• Better integration with tournament settings and team management</p>
+          <p>• Consistent user experience across all tournament operations</p>
+          <p>• Advanced fixture generation and scheduling capabilities</p>
+        </div>
+      </div>
     </div>
   );
 }

@@ -17,14 +17,27 @@ import { useToast } from "@/hooks/use-toast";
 
 interface GenerateFixturesDialogProps {
   tournamentId: string;
+  stageId?: string;
+  stageName?: string;
+  stageType?: string;
   trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export default function GenerateFixturesDialog({
   tournamentId,
+  stageId,
+  stageName,
+  stageType,
   trigger,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: GenerateFixturesDialogProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledOnOpenChange || setInternalOpen;
+  
   const [formData, setFormData] = useState({
     startDate: "",
     kickoffTime: "13:00",
@@ -47,10 +60,15 @@ export default function GenerateFixturesDialog({
     }
 
     try {
-      const result = await generateFixtures.mutateAsync(formData);
+      // Include stageId in the request if provided
+      const requestData = stageId 
+        ? { ...formData, stageId }
+        : formData;
+        
+      const result = await generateFixtures.mutateAsync(requestData);
       toast({
         title: "Success",
-        description: (result as any).message || "Fixtures generated successfully",
+        description: (result as any).message || `Fixtures generated successfully${stageName ? ` for ${stageName}` : ''}`,
       });
       setOpen(false);
       setFormData({
@@ -79,15 +97,15 @@ export default function GenerateFixturesDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>Generate Fixtures</DialogTitle>
+          <DialogTitle>Generate Fixtures{stageName ? ` - ${stageName}` : ''}</DialogTitle>
           <DialogDescription>
-            Configure fixture generation settings
+            Configure fixture generation settings{stageType ? ` for ${stageType} format` : ''}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 overflow-y-auto pr-2">
           <div className="space-y-2">
             <Label htmlFor="startDate">Start Date</Label>
             <Input

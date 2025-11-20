@@ -16,6 +16,7 @@ import { usePlayers, useCreatePlayer } from "@/hooks/usePlayers";
 import { useOrganizations } from "@/hooks/useReferenceData";
 import { useToast } from "@/hooks/use-toast";
 import { insertPlayerRegistrySchema, type Contract, type Transfer, type DisciplinaryRecord } from "@shared/schema";
+import { supabase } from "../lib/supabase";
 import { format } from "date-fns";
 import * as XLSX from "xlsx";
 
@@ -139,11 +140,13 @@ function PlayerContracts({ upid }: { upid: string }) {
   });
 
   const { data: teams } = useQuery({
-    queryKey: ["/api/teams"],
+    queryKey: ["teams", "all"],
     queryFn: async () => {
-      const res = await fetch("/api/teams");
-      if (!res.ok) throw new Error("Failed to fetch teams");
-      return res.json();
+      const { data, error } = await supabase
+        .from('teams')
+        .select('*');
+      if (error) throw error;
+      return data || [];
     },
     enabled: isOpen && !!contracts,
   });
@@ -227,11 +230,13 @@ function PlayerTransfers({ upid }: { upid: string }) {
   });
 
   const { data: teams } = useQuery({
-    queryKey: ["/api/teams"],
+    queryKey: ["teams", "all"],
     queryFn: async () => {
-      const res = await fetch("/api/teams");
-      if (!res.ok) throw new Error("Failed to fetch teams");
-      return res.json();
+      const { data, error } = await supabase
+        .from('teams')
+        .select('*');
+      if (error) throw error;
+      return data || [];
     },
     enabled: isOpen && !!transfers,
   });

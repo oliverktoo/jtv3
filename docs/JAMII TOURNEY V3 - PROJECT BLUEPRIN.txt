@@ -1,0 +1,2402 @@
+**JAMII TOURNEY V3 - PROJECT BLUEPRINT (KENYAN MULTI‑MODEL)**
+
+**\*\*Purpose:\*\*** A practical, end‑to‑end blueprint for building the next‑gen Jamii Tourney application (v3), using the previous app (v2) as a development sandbox and reference. This blueprint incorporates the improved multi‑model tournament design for the Kenyan context, generic competition staging, strict RLS, and a production‑ready frontend and deployment plan.
+
+\---
+
+**\## 1) Executive Summary**
+
+Jamii Tourney v3 is a **\*\*multi‑model tournament platform\*\*** supporting:
+
+\- **\*\*Administrative\*\***: Ward → Sub‑County → County → National
+
+\- **\*\*Inter‑County\*\***: multi‑county derbies/events with slot allocations
+
+\- **\*\*Independent\*\***: open registration without geographic constraints
+
+\- **\*\*League Systems\*\***: fully configurable divisions, groups, fixtures, and tiebreakers
+
+**\*\*Core principles\*\***: clear domain modeling, strict data isolation by **\*\*org\*\*** and **\*\*sport\*\***, predictable **\*\*status lifecycle\*\***, configurable **\*\*scheduling rules\*\*** (e.g., Sat/Sun 13:00 KO), and **\*\*auditable\*\*** policies.
+
+**\*\*Primary stack\*\***: React (Vite) + Supabase (Postgres/Auth/Storage) + Netlify.
+
+\---
+
+**\## 2) Scope & Objectives**
+
+**\### 2.1 Goals**
+
+\- Provide a **\*\*unified schema\*\*** that models all Kenyan tournament types.
+
+\- Enable **\*\*fast setup\*\*** of fixtures with weekend scheduling defaults.
+
+\- Guarantee **\*\*safe multi‑tenancy\*\*** (org‑scoped) and **\*\*sport isolation\*\***.
+
+\- Ship a **\*\*clean MVP\*\***: create tournaments → register teams → generate fixtures → export to Excel → publish public read view.
+
+**\### 2.2 Non‑Goals (MVP)**
+
+\- No payments/MPesa (deferred).
+
+\- No live officiating workflows (cards, sanctions) beyond match results entry.
+
+\- No advanced analytics dashboards (basic standings only in MVP).
+
+\---
+
+**\## 3) Personas & Roles**
+
+**\*\*Roles (DB enum):\*\***
+
+\- \`SYSTEM_ADMIN\` - platform‑wide ops.
+
+\- \`NATIONAL_COORDINATOR\` - governs national/admin tournaments.
+
+\- \`COUNTY_OFFICER\`, \`SUB_COUNTY_OFFICER\`, \`WARD_OFFICER\` - admin levels.
+
+\- \`FEDERATION_ADMIN\` - league/federation setups (FKF, Schools, etc.).
+
+\- \`TOURNAMENT_ORGANIZER\` - independent tournaments.
+
+\- \`VIEWER\` - read‑only.
+
+**\*\*Key user journeys:\*\***
+
+1) Organizer creates a tournament (chooses model) → configures geography or league structure.
+
+2) Adds teams (manually or via CSV) → assigns to groups/divisions.
+
+3) Generates fixtures (home/away or single round) with 13:00 weekend rule.
+
+4) Enters scores → standings auto‑update.
+
+5) Exports fixtures/standings to Excel → publishes public view.
+
+\---
+
+**\## 4) Domain Model Overview**
+
+**\### 4.1 Tournament Models (enum)**
+
+\- \`ADMINISTRATIVE_WARD\`, \`ADMINISTRATIVE_SUB_COUNTY\`, \`ADMINISTRATIVE_COUNTY\`, \`ADMINISTRATIVE_NATIONAL\`
+
+\- \`INTER_COUNTY\`, \`INDEPENDENT\`, \`LEAGUE\`
+
+**\### 4.2 Generic Competition Structure**
+
+\`\`\`
+
+Tournament
+
+&nbsp;└─ Stages (LEAGUE | GROUP | KNOCKOUT)
+
+&nbsp;    ├─ League Divisions (tiered; points & tiebreakers)
+
+&nbsp;    ├─ Groups (pools)
+
+&nbsp;    └─ Rounds (matchdays/legs)
+
+&nbsp;        └─ Matches
+
+\`\`\`
+
+**\### 4.3 Geography & Membership**
+
+\- Geography (county/sub‑county/ward) is **\*\*required/nullable\*\*** based on the model.
+
+\- **\*\*Inter‑County\*\***: explicit \`tournament_counties\` + \`tournament_county_slots\`.
+
+\- Membership via \`tournament_members (user_id, role)\` controls RLS.
+
+\---
+
+**\## 5) Data Architecture (DDL Summary)**
+
+\> Full migrations will implement the following entities and constraints.
+
+**\### 5.1 Core Entities**
+
+\- **\*\*\`tournaments\`\*\***: org‑scoped, sport‑scoped, model enum, status enum, period (\`daterange\`), slug, publish flag, \`custom_rules\`/\`league_structure\` (JSONB optional), admin geography FKs, uniqueness \`(org_id, season, name)\`.
+
+\- **\*\*\`tournament_counties\`\*\***: counties participating in an inter‑county tournament (valid only if model = \`INTER_COUNTY\`).
+
+\- **\*\*\`tournament_county_slots\`\*\***: per‑county allocations (base/bonus/wildcard).
+
+\- **\*\*\`stages\`\*\***: ordered phases (enum \`LEAGUE|GROUP|KNOCKOUT\`), \`seq\` unique per tournament.
+
+\- **\*\*\`league_divisions\`\*\***: division level (1 = top), points W/D/L, tiebreakers array.
+
+\- **\*\*\`groups\`\*\***: groups/pools; ordered by \`seq\` within a stage.
+
+\- **\*\*\`rounds\`\*\***: per group/stage, \`number\` and \`leg\` (1/2) for home/away cycles.
+
+\- **\*\*\`matches\`\*\***: links teams, rounds, kickoff, venue, scores, status.
+
+\- **\*\*\`tournament_members\`\*\***: user access roles for RLS.
+
+**\### 5.2 Enums**
+
+\- \`tournament_model_enum\`, \`tournament_status_enum\`, \`federation_type_enum\`, \`stage_type_enum\`, \`tournament_role_enum\`.
+
+**\### 5.3 Constraints**
+
+\- Model‑specific geography CHECKs (e.g., ward required for \`ADMINISTRATIVE_WARD\`).
+
+\- Date validity: \`start_date <= end_date\`; \`period\` generated from dates.
+
+\- Inter‑county tables constrained to only allow \`INTER_COUNTY\` parents.
+
+**\### 5.4 Indexes**
+
+\- On model, status, \`(county_id, sub_county_id, ward_id)\`, GIST on \`period\` for date queries.
+
+\- GIN trigram on \`name\` for fast search; GIN on \`custom_rules\`.
+
+\---
+
+**\## 6) Security & RLS**
+
+\- \`tournaments\` enabled for RLS.
+
+\- Public can \`SELECT\` only when \`is_published = true\`.
+
+\- Members (by \`auth.uid()\`) can read/write their tournaments.
+
+\- Policy skeletons for \`SELECT/INSERT/UPDATE\` are included in migrations.
+
+\- Extend similar RLS to stages, groups, rounds, matches (via parent checks).
+
+**\*\*Auditability:\*\*** use default triggers to set \`updated_at\` on change. Consider a generic \`activity_log\` table later (deferred).
+
+\---
+
+**\## 7) Status Lifecycle**
+
+\`DRAFT → REGISTRATION → ACTIVE → COMPLETED → ARCHIVED\`
+
+\- Optional future: trigger to enforce legal transitions.
+
+\- UI disables actions that violate the lifecycle.
+
+\---
+
+**\## 8) Scheduling & Fixtures**
+
+**\### 8.1 Scheduling Defaults**
+
+\- **\*\*Weekend focus\*\***: **\*\*Saturday/Sunday\*\***, default **\*\*13:00\*\*** kickoff (configurable per tournament).
+
+\- Home‑and‑away or single round supported.
+
+\- Odd team counts produce BYEs automatically.
+
+**\### 8.2 Generator Inputs**
+
+\- Team list (IDs & names), selected structure (single/double round), start date, KO time, venue optional.
+
+\- For leagues: uses \`groups\` + \`rounds\` to emit \`matches\`.
+
+**\### 8.3 Outputs**
+
+\- Persisted \`rounds\` and \`matches\` with ISO datetimes.
+
+\- Deterministic rotation algorithm; reversible for leg 2.
+
+**\### 8.4 Acceptance (MVP)**
+
+\- \[ \] Given N teams and a start date, system creates complete weekend fixtures.
+
+\- \[ \] No weekday kickoffs unless explicitly enabled.
+
+\- \[ \] Exports to Excel (see §13) match the DB schedule.
+
+\---
+
+**\## 9) Standings & Tiebreakers**
+
+\- Points: default **\*\*3/1/0\*\*** (editable per division).
+
+\- Tiebreakers order default: \`POINTS > GD > GF > H2H\` (editable per division).
+
+\- Standings view materialized as a **\*\*SQL view\*\*** or computed query that aggregates matches by division/group.
+
+**\*\*Done when:\*\***
+
+\- \[ \] After entering results, standings reflect changes within 5s.
+
+\- \[ \] Tiebreaker order is honored per division config.
+
+\---
+
+**\## 10) Federation Templates**
+
+Pre‑sets speed up creation:
+
+\- **\*\*FKF\*\***: 4 divisions; promotion \`\[3,3,2\]\`; relegation \`\[3,3,4\]\`; league cup true.
+
+\- **\*\*SCHOOLS\*\***: 2 divisions; age groups \`U15/U17/U19\`.
+
+\- **\*\*CORPORATE\*\***: 1 division; departments enabled.
+
+The UI writes these to \`stages\`, \`league_divisions\`, and \`groups\` with typed columns; open‑ended parts live in \`custom_rules\` JSONB.
+
+\---
+
+**\## 11) Frontend Architecture**
+
+**\*\*Stack\*\***: Vite + React + Tailwind + React Router + React Hook Form + Zod + Supabase JS + XLSX.
+
+**\*\*Structure\*\***
+
+\`\`\`
+
+src/
+
+&nbsp;├─ lib/
+
+&nbsp;│   ├─ supabaseClient.js
+
+&nbsp;│   ├─ fixtures/roundRobin.js
+
+&nbsp;│   └─ export/xlsx.js
+
+&nbsp;├─ hooks/
+
+&nbsp;│   ├─ useTournaments.js
+
+&nbsp;│   ├─ useLeagueCustomizer.js
+
+&nbsp;│   └─ useInterCountyManager.js
+
+&nbsp;├─ pages/
+
+&nbsp;│   ├─ Home.jsx
+
+&nbsp;│   ├─ Tournaments.jsx
+
+&nbsp;│   ├─ Fixtures.jsx
+
+&nbsp;│   └─ Standings.jsx
+
+&nbsp;└─ components/Tournament/
+
+&nbsp;    ├─ TournamentForm.js
+
+&nbsp;    ├─ TournamentList.js
+
+&nbsp;    ├─ TournamentCard.js
+
+&nbsp;    ├─ TournamentTeams.js
+
+&nbsp;    ├─ KenyanAdminSelector.js
+
+&nbsp;    ├─ TournamentHierarchy.js
+
+&nbsp;    ├─ InterCountySelector.js
+
+&nbsp;    └─ ModelSpecificManagers/
+
+&nbsp;        ├─ WardTournamentManager.js
+
+&nbsp;        ├─ SubCountyTournamentManager.js
+
+&nbsp;        ├─ CountyTournamentManager.js
+
+&nbsp;        ├─ NationalTournamentManager.js
+
+&nbsp;        ├─ InterCountyManager.js
+
+&nbsp;        ├─ IndependentTournamentManager.js
+
+&nbsp;        └─ LeagueManager.js
+
+\`\`\`
+
+**\*\*Navigation\*\***: \`Home → Tournaments (create/manage) → Fixtures → Standings\`.
+
+\---
+
+**\## 12) Key Hooks & Services (Contracts)**
+
+**\### 12.1 \`useTournaments()\`**
+
+\- \`createTournament(payload)\` → inserts \`tournaments\` and default \`stages\`.
+
+\- \`getTournamentsByModel(model, filters)\` → lists scoped to org/sport.
+
+\- \`publishTournament(id, flag)\` → toggles \`is_published\` (RLS check).
+
+**\*\*Payload (create):\*\***
+
+\`\`\`json
+
+{
+
+&nbsp; "org_id": "uuid",
+
+&nbsp; "sport_id": "uuid",
+
+&nbsp; "name": "Upper Rift Regional League Zone A",
+
+&nbsp; "season": "2025/26",
+
+&nbsp; "tournament_model": "LEAGUE",
+
+&nbsp; "federation_type": "FKF",
+
+&nbsp; "start_date": "2025-10-11",
+
+&nbsp; "end_date": "2026-07-26",
+
+&nbsp; "custom_rules": { "kickoff_time": "13:00", "weekends_only": true }
+
+}
+
+\`\`\`
+
+**\### 12.2 \`useLeagueCustomizer(leagueId)\`**
+
+\- \`updateDivisionSettings(level, points, tiebreakers)\` → updates \`league_divisions\`.
+
+\- \`addGroup(stageId, name)\` / \`removeGroup(id)\`.
+
+\- \`generateFixtures(config)\` → writes \`rounds\` + \`matches\`.
+
+**\### 12.3 \`useInterCountyManager(tournamentId)\`**
+
+\- \`addCounty(county_id)\` / \`removeCounty(county_id)\`.
+
+\- \`manageCountySlots(county_id, base, bonus, wildcard)\`.
+
+\- \`listParticipants()\`.
+
+\---
+
+**\## 13) Exports (Excel)**
+
+\- Use \`xlsx\` to export:
+
+&nbsp; - Fixtures (date, time, home, away, venue, stage, round).
+
+&nbsp; - Standings (team, MP, W/D/L, GF/GA/GD, Pts, position).
+
+**\*\*Done when:\*\***
+
+\- \[ \] A button on \`Fixtures\` page downloads \`fixtures.xlsx\` correctly.
+
+\- \[ \] A button on \`Standings\` page downloads \`standings.xlsx\` correctly.
+
+\---
+
+**\## 14) Environment & Config**
+
+**\*\*\`.env.example\`\*\***
+
+\`\`\`
+
+VITE_SUPABASE_URL=
+
+VITE_SUPABASE_ANON_KEY=
+
+VITE_APP_NAME=Jamii Tourney v3
+
+\`\`\`
+
+Netlify site variables mirror the above; **\*\*never\*\*** store service_role in the frontend.
+
+\---
+
+**\## 15) Deployment (Netlify)**
+
+\- \`netlify.toml\` with SPA redirects and functions passthrough (future use).
+
+\- Build command: \`npm run build\`; publish: \`dist\`.
+
+\- Post‑processing (minify/bundle) may be toggled; keep source maps in staging.
+
+**\*\*Done when:\*\***
+
+\- \[ \] \`main\` branch deploys to production.
+
+\- \[ \] \`dev\` branch deploys to staging.
+
+\---
+
+**\## 16) CI/CD & Versioning**
+
+\- Git branches: \`main\` (prod), \`dev\` (integration), \`feat/\*\`.
+
+\- Conventional commits (e.g., \`feat: fixtures generator\`).
+
+\- Pre‑push checks: type/lint/test/build.
+
+\---
+
+**\## 17) Testing Strategy**
+
+\- **\*\*Unit\*\***: fixture generator, standings calc, hooks stubs.
+
+\- **\*\*Integration\*\***: Supabase CRUD with RLS (authenticated vs public).
+
+\- **\*\*E2E\*\***: smoke flows - create → configure → generate → export.
+
+**\*\*Exit criteria (MVP):\*\***
+
+\- \[ \] 90%+ unit coverage for generator & standings.
+
+\- \[ \] E2E flows green in staging.
+
+\---
+
+**\## 18) Observability & Ops**
+
+\- Capture client errors with a lightweight logger (console + optional Sentry later).
+
+\- Include build info (git SHA, version) in the footer for traceability.
+
+\- Daily DB backups (Supabase default) + manual export before major migrations.
+
+\---
+
+**\## 19) Roadmap & Milestones**
+
+**\### Phase 1 - Foundations (Week 1)**
+
+\- Enums, \`tournaments\`, RLS, members ✅
+
+\- Stages/Divisions/Groups/Rounds/Matches ✅
+
+\- Hooks skeleton + basic pages ✅
+
+**\### Phase 2 - Scheduling & League (Week 2)**
+
+\- Fixture generator (weekends 13:00) ✅
+
+\- League customizer (divisions, tiebreakers) ✅
+
+\- Standings view ✅
+
+**\### Phase 3 - Inter‑County & Admin Models (Week 3)**
+
+\- County selectors + slot allocation ✅
+
+\- Admin geography validations ✅
+
+\- CSV import of teams ✅
+
+**\### Phase 4 - Polish & Launch (Week 4)**
+
+\- Excel exports ✅
+
+\- Public read portal ✅
+
+\- Docs & training ✅
+
+_\*(Timelines indicative-adjust to actual capacity.)\*_
+
+\---
+
+**\## 20) Appendix A - Key SQL Elements (excerpt)**
+
+\> Final migrations will provide full, runnable SQL. Excerpts below clarify structure.
+
+\`\`\`sql
+
+\-- Enums: tournament_model_enum, tournament_status_enum, federation_type_enum,
+
+\-- stage_type_enum, tournament_role_enum
+
+\-- tournaments (org_id, sport_id, name, slug, model, status, season, dates, period,
+
+\-- geography FKs, league_structure, custom_rules, is_published, created_by)
+
+\-- tournament_counties (only valid for INTER_COUNTY)
+
+\-- tournament_county_slots (base/bonus/wildcard per county)
+
+\-- stages (stage_type, seq), league_divisions (points/tiebreakers),
+
+\-- groups (seq), rounds (number, leg), matches (teams, kickoff, scores)
+
+\-- tournament_members (RLS roles), policies for read/write
+
+\-- indexes: model/status/geography/period/name_trgm/custom_rules_gin
+
+\`\`\`
+
+\---
+
+**\## 21) Appendix B - Types (frontend)**
+
+\`\`\`ts
+
+export type TournamentModel =
+
+&nbsp;| 'ADMINISTRATIVE_WARD' | 'ADMINISTRATIVE_SUB_COUNTY' | 'ADMINISTRATIVE_COUNTY'
+
+&nbsp;| 'ADMINISTRATIVE_NATIONAL' | 'INTER_COUNTY' | 'INDEPENDENT' | 'LEAGUE'
+
+export type TournamentStatus = 'DRAFT'|'REGISTRATION'|'ACTIVE'|'COMPLETED'|'ARCHIVED'
+
+export interface Tournament {
+
+&nbsp; id: string; org_id: string; sport_id: string; name: string; slug: string;
+
+&nbsp; tournament_model: TournamentModel; status: TournamentStatus;
+
+&nbsp; season?: string; start_date?: string; end_date?: string; is_published: boolean;
+
+&nbsp; county_id?: string; sub_county_id?: string; ward_id?: string;
+
+&nbsp; league_structure?: any; custom_rules?: any;
+
+}
+
+\`\`\`
+
+\---
+
+**\## 22) Glossary**
+
+\- **\*\*Division\*\***: tier within a league stage (Level 1 = top tier).
+
+\- **\*\*Group\*\***: pool of teams playing round‑robin inside a stage/division.
+
+\- **\*\*Round\*\***: a matchday or leg number for scheduling.
+
+\- **\*\*Stage\*\***: a phase of the competition (league/group/knockout).
+
+\- **\*\*BYE\*\***: automatic free week for odd team counts.
+
+\---
+
+**\## 23) Player Management (Registration · Approval · Transfers · Squad Numbers)**
+
+**\### 23.1 Objectives**
+
+\- Register players with **\*\*verifiable identity\*\***, photos, and eligibility.
+
+\- Approve/verify registrations via a **\*\*review queue\*\*** (RLS‑safe).
+
+\- Manage **\*\*rosters\*\*** per tournament (unique squad numbers per team/season).
+
+\- Handle **\*\*transfers\*\*** within a tournament season with auditable clearances.
+
+\- Publish **\*\*public rosters\*\*** (limited fields) once a tournament is published.
+
+**\### 23.2 Data Model (DDL Summary)**
+
+**\*\*Enums\*\***
+
+\`\`\`sql
+
+CREATE TYPE sex_enum AS ENUM ('MALE','FEMALE','OTHER');
+
+CREATE TYPE id_type_enum AS ENUM ('NATIONAL_ID','BIRTH_CERT','PASSPORT','STUDENT_ID','OTHER');
+
+CREATE TYPE player_status_enum AS ENUM ('ACTIVE','SUSPENDED','RETIRED');
+
+CREATE TYPE registration_status_enum AS ENUM ('DRAFT','SUBMITTED','VERIFIED','APPROVED','REJECTED','WITHDRAWN');
+
+CREATE TYPE roster_member_status_enum AS ENUM ('PENDING','APPROVED','REJECTED','TRANSFERRED','LEFT');
+
+CREATE TYPE transfer_status_enum AS ENUM ('REQUESTED','ORIGIN_CLEARED','DEST_ACCEPTED','REGISTRAR_APPROVED','APPROVED','REJECTED','CANCELLED');
+
+\`\`\`
+
+**\*\*Players\*\*** (org & sport scoped)
+
+\`\`\`sql
+
+CREATE TABLE players (
+
+&nbsp; id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+&nbsp; org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE RESTRICT,
+
+&nbsp; sport_id UUID NOT NULL REFERENCES sports(id) ON DELETE RESTRICT,
+
+&nbsp; gpc_code TEXT UNIQUE,                     -- Global Player Code (FIFA‑style) optional
+
+&nbsp; first_name TEXT NOT NULL,
+
+&nbsp; last_name  TEXT NOT NULL,
+
+&nbsp; other_names TEXT,
+
+&nbsp; dob DATE NOT NULL,
+
+&nbsp; sex sex_enum,
+
+&nbsp; nationality TEXT DEFAULT 'Kenya',
+
+&nbsp; photo_path TEXT,                          -- storage: player-photos bucket
+
+&nbsp; preferred_positions TEXT\[\],
+
+&nbsp; status player_status_enum DEFAULT 'ACTIVE',
+
+&nbsp; created_by UUID REFERENCES auth.users(id),
+
+&nbsp; created_at TIMESTAMPTZ DEFAULT now(),
+
+&nbsp; updated_at TIMESTAMPTZ DEFAULT now()
+
+);
+
+\`\`\`
+
+**\*\*Player Identity Documents\*\*** (unique per org + id)
+
+\`\`\`sql
+
+CREATE TABLE player_ids (
+
+&nbsp; id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+&nbsp; org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE RESTRICT,
+
+&nbsp; player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+
+&nbsp; id_type id_type_enum NOT NULL,
+
+&nbsp; id_number TEXT NOT NULL,
+
+&nbsp; issuing_authority TEXT,
+
+&nbsp; document_path TEXT,           -- storage path for scan/photo
+
+&nbsp; verified BOOLEAN DEFAULT false,
+
+&nbsp; verified_at TIMESTAMPTZ,
+
+&nbsp; UNIQUE (org_id, id_type, id_number)
+
+);
+
+\`\`\`
+
+**\*\*Rosters (team ↔ tournament)\*\***
+
+\`\`\`sql
+
+CREATE TABLE team_rosters (
+
+&nbsp; id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+&nbsp; tournament_id UUID NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+
+&nbsp; team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+
+&nbsp; created_at TIMESTAMPTZ DEFAULT now(),
+
+&nbsp; UNIQUE (tournament_id, team_id)
+
+);
+
+CREATE TABLE roster_members (
+
+&nbsp; id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+&nbsp; roster_id UUID NOT NULL REFERENCES team_rosters(id) ON DELETE CASCADE,
+
+&nbsp; player_id UUID NOT NULL REFERENCES players(id) ON DELETE RESTRICT,
+
+&nbsp; squad_number INT CHECK (squad_number BETWEEN 1 AND 99),
+
+&nbsp; jersey_name TEXT,
+
+&nbsp; position TEXT,
+
+&nbsp; status roster_member_status_enum DEFAULT 'PENDING',
+
+&nbsp; joined_at TIMESTAMPTZ DEFAULT now(),
+
+&nbsp; left_at TIMESTAMPTZ,
+
+&nbsp; UNIQUE (roster_id, player_id) WHERE status IN ('PENDING','APPROVED'),
+
+&nbsp; UNIQUE (roster_id, squad_number) WHERE status IN ('PENDING','APPROVED')
+
+);
+
+\`\`\`
+
+**\*\*Registration workflow (auditable)\*\***
+
+\`\`\`sql
+
+CREATE TABLE player_registrations (
+
+&nbsp; id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+&nbsp; tournament_id UUID NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+
+&nbsp; team_id UUID NOT NULL REFERENCES teams(id) ON DELETE RESTRICT,
+
+&nbsp; player_id UUID NOT NULL REFERENCES players(id) ON DELETE RESTRICT,
+
+&nbsp; status registration_status_enum NOT NULL DEFAULT 'DRAFT',
+
+&nbsp; submitted_by UUID REFERENCES auth.users(id),
+
+&nbsp; reviewed_by  UUID REFERENCES auth.users(id),
+
+&nbsp; review_notes TEXT,
+
+&nbsp; created_at TIMESTAMPTZ DEFAULT now(),
+
+&nbsp; updated_at TIMESTAMPTZ DEFAULT now(),
+
+&nbsp; UNIQUE (tournament_id, team_id, player_id)
+
+);
+
+\`\`\`
+
+**\*\*Transfers (in‑season)\*\***
+
+\`\`\`sql
+
+CREATE TABLE transfer_requests (
+
+&nbsp; id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+&nbsp; tournament_id UUID NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+
+&nbsp; player_id UUID NOT NULL REFERENCES players(id) ON DELETE RESTRICT,
+
+&nbsp; from_team_id UUID NOT NULL REFERENCES teams(id) ON DELETE RESTRICT,
+
+&nbsp; to_team_id   UUID NOT NULL REFERENCES teams(id) ON DELETE RESTRICT,
+
+&nbsp; requested_by UUID REFERENCES auth.users(id),
+
+&nbsp; status transfer_status_enum DEFAULT 'REQUESTED',
+
+&nbsp; origin_clearer_id UUID REFERENCES auth.users(id),
+
+&nbsp; dest_approver_id  UUID REFERENCES auth.users(id),
+
+&nbsp; registrar_id      UUID REFERENCES auth.users(id),
+
+&nbsp; reason TEXT,
+
+&nbsp; decided_at TIMESTAMPTZ,
+
+&nbsp; created_at TIMESTAMPTZ DEFAULT now(),
+
+&nbsp; CONSTRAINT ck_distinct_teams CHECK (from_team_id <> to_team_id)
+
+);
+
+\`\`\`
+
+**\*\*Optional (history)\*\***
+
+\`\`\`sql
+
+CREATE TABLE player_number_history (
+
+&nbsp; id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+&nbsp; player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+
+&nbsp; tournament_id UUID NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+
+&nbsp; team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+
+&nbsp; squad_number INT NOT NULL,
+
+&nbsp; from_date DATE NOT NULL DEFAULT CURRENT_DATE,
+
+&nbsp; to_date DATE
+
+);
+
+\`\`\`
+
+**\### 23.3 Constraints & Business Rules**
+
+\- **\*\*One active roster spot per tournament\*\***: a player may have only one \`APPROVED\` membership under a given \`tournament_id\`.
+
+\- **\*\*Unique squad numbers\*\*** per \`team_roster\` (1-99). Enforced by partial unique index in \`roster_members\`.
+
+\- **\*\*Age‑group checks\*\*** (if configured): age is computed at the tournament's **\*\*reference date\*\*** (e.g., start date), enforce via application + CHECK trigger if needed.
+
+\- **\*\*Identity duplication\*\*** prevented by \`player_ids (org_id, id_type, id_number)\` unique.
+
+\- **\*\*Transfer execution\*\***: upon \`transfer_requests.status = 'APPROVED'\`, previous roster membership becomes \`TRANSFERRED\` (sets \`left_at\`), new roster membership is created with new or retained squad number (if available).
+
+**\### 23.4 RLS & Views**
+
+\- \`players\` and \`player_ids\`: **\*\*org‑scoped\*\***; only org members can read/write; never public.
+
+\- \`player_registrations\`, \`team_rosters\`, \`roster_members\`, \`transfer_requests\`: **\*\*tournament‑scoped\*\***; members of the tournament can read/write per role.
+
+\- **\*\*Public roster view\*\*** (read‑only when tournament published): expose minimal fields (name, jersey, number, position, photo) without sensitive IDs.
+
+**\*\*Example public view\*\***
+
+\`\`\`sql
+
+CREATE VIEW v_public_roster AS
+
+SELECT t.id AS tournament_id, tr.team_id, rm.player_id,
+
+&nbsp;      p.first_name, p.last_name, rm.squad_number, rm.position, p.photo_path
+
+FROM tournaments t
+
+JOIN team_rosters tr ON tr.tournament_id = t.id
+
+JOIN roster_members rm ON rm.roster_id = tr.id AND rm.status = 'APPROVED'
+
+JOIN players p ON p.id = rm.player_id
+
+WHERE t.is_published = true;
+
+\`\`\`
+
+**\### 23.5 Workflows**
+
+**\*\*A) Player Registration\*\***
+
+1\. Team official creates/edits **\*\*Player\*\*** (+ ID doc + photo).
+
+2\. Submits **\*\*Player Registration\*\*** for \`(tournament, team, player)\` → status \`SUBMITTED\`.
+
+3\. Registrar reviews: set \`VERIFIED/APPROVED/REJECTED\` with notes.
+
+4\. On **\*\*APPROVED\*\*** → ensure \`team_rosters\` row exists, then create \`roster_members\` with \`status='APPROVED'\` and (optional) \`squad_number\`.
+
+**\*\*B) Squad Numbers\*\***
+
+\- Per team roster: numbers **\*\*1-99\*\***, unique; configurable rule to reserve **\*\*#1\*\*** for goalkeepers (optional policy in \`custom_rules\`).
+
+\- Editing a number updates \`roster_members.squad_number\` and appends to \`player_number_history\`.
+
+**\*\*C) Transfers\*\***
+
+1\. Destination team opens **\*\*Transfer Request\*\*** (REQUESTED).
+
+2\. Origin clears (**\*\*ORIGIN_CLEARED\*\***).
+
+3\. Destination accepts (**\*\*DEST_ACCEPTED\*\***).
+
+4\. Registrar sets **\*\*REGISTRAR_APPROVED → APPROVED\*\***.
+
+5\. System: sets old roster membership to \`TRANSFERRED\` (+ \`left_at\`), creates new \`roster_members (APPROVED)\`; number collision is prevented by the unique constraint.
+
+**\### 23.6 UI Components**
+
+\- \`PlayerForm\` (bio, DoB, IDs, photo upload)
+
+\- \`PlayerList\` / \`PlayerCard\` (quick search, filters)
+
+\- \`RegistrationForm\` (bind player→team→tournament)
+
+\- \`RegistrationReviewQueue\` (bulk approve/reject with notes)
+
+\- \`SquadNumberManager\` (inline number editor with conflict detection)
+
+\- \`TransferCenter\` (request, approvals, audit trail)
+
+\- \`PlayerCardPreview\` (printable ID; QR encodes \`player_id + tournament_id\`)
+
+**\### 23.7 Hooks & Services (contracts)**
+
+\`\`\`ts
+
+// Players
+
+const { createPlayer, updatePlayer, getPlayer, searchPlayers, uploadPhotoSignedUrl } = usePlayers();
+
+// Registrations & Rosters
+
+const { submitRegistration, reviewRegistration, listRegistrations } = useRegistrations();
+
+const { getTeamRoster, addToRoster, setSquadNumber, removeFromRoster } = useRosters();
+
+// Transfers
+
+const { requestTransfer, approveTransfer, rejectTransfer, listTransfers } = useTransfers();
+
+\`\`\`
+
+**\### 23.8 Exports & Cards**
+
+\- **\*\*Excel\*\***: registration list, approved roster with numbers, transfer log.
+
+\- **\*\*PDF\*\***: player ID cards with QR (+ tournament/season branding).
+
+**\### 23.9 Acceptance (MVP)**
+
+\- \[ \] Register a player with verified ID and photo.
+
+\- \[ \] Submit and approve registration → player appears on roster.
+
+\- \[ \] Assign unique squad numbers per team (validation enforced).
+
+\- \[ \] Execute a transfer end‑to‑end with automatic roster updates.
+
+\- \[ \] Public roster page shows approved players once tournament is published.
+
+\---
+
+**\## 24) Monetisation & Payments (Schema & Flow)**
+
+**\### 24.1 Fees & Strategy (per tournament)**
+
+Use \`tournaments.custom_rules\` to toggle fees and where they apply.
+
+\`\`\`json
+
+{
+
+&nbsp; "registration_mode": "TEAM_DRIVEN",
+
+&nbsp; "requires_id_verification": true,
+
+&nbsp; "fees": {
+
+&nbsp;   "strategy": "BEFORE_REVIEW",
+
+&nbsp;   "player_registration": 250,
+
+&nbsp;   "transfer": 300,
+
+&nbsp;   "card_replacement": 150,
+
+&nbsp;   "late_registration_surcharge": 100,
+
+&nbsp;   "premium_numbers": { "7": 100, "10": 100 }
+
+&nbsp; }
+
+}
+
+\`\`\`
+
+**\### 24.2 Payments DDL (MVP)**
+
+\`\`\`sql
+
+\-- enums
+
+DO \$\$ BEGIN
+
+&nbsp; IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'invoice_status_enum') THEN
+
+&nbsp;   CREATE TYPE invoice_status_enum AS ENUM ('PENDING','PAID','CANCELLED','REFUNDED');
+
+&nbsp; END IF;
+
+END \$\$;
+
+\-- tables
+
+CREATE TABLE IF NOT EXISTS invoices (
+
+&nbsp; id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+&nbsp; org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE RESTRICT,
+
+&nbsp; tournament_id UUID REFERENCES tournaments(id) ON DELETE CASCADE,
+
+&nbsp; player_id UUID REFERENCES players(id) ON DELETE SET NULL,
+
+&nbsp; team_id UUID REFERENCES teams(id) ON DELETE SET NULL,
+
+&nbsp; purpose TEXT NOT NULL,                            -- 'PLAYER_REGISTRATION' | 'TRANSFER' | 'CARD_REPLACEMENT' | ...
+
+&nbsp; amount_ksh NUMERIC(10,2) NOT NULL,
+
+&nbsp; status invoice_status_enum DEFAULT 'PENDING',
+
+&nbsp; meta JSONB,
+
+&nbsp; created_at TIMESTAMPTZ DEFAULT now(),
+
+&nbsp; paid_at TIMESTAMPTZ
+
+);
+
+CREATE TABLE IF NOT EXISTS payments (
+
+&nbsp; id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+&nbsp; invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+
+&nbsp; method TEXT NOT NULL,                             -- 'MPESA'
+
+&nbsp; provider_ref TEXT,                                -- Mpesa receipt
+
+&nbsp; amount_ksh NUMERIC(10,2) NOT NULL,
+
+&nbsp; success BOOLEAN DEFAULT false,
+
+&nbsp; created_at TIMESTAMPTZ DEFAULT now()
+
+);
+
+\-- RLS (simple dev defaults; tighten per org_members later)
+
+ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY inv_read ON invoices FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY inv_write ON invoices FOR INSERT, UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY pay_read ON payments FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY pay_write ON payments FOR INSERT TO authenticated USING (true) WITH CHECK (true);
+
+\`\`\`
+
+**\### 24.3 Flow**
+
+1) Create invoice when registration/transfer hits the payable step.
+
+2) Trigger MPesa STK (Netlify function or server) → poll status.
+
+3) On PAID → unlock next workflow step (review/activation).
+
+\---
+
+**\## 25) Players Module - Frontend Scaffolds (Files & Code)**
+
+\> Minimal, production‑lean stubs that compile. Fill in UI polish later.
+
+**\### 25.1 Hooks**
+
+**\*\*\`src/hooks/usePlayers.js\`\*\***
+
+\`\`\`javascript
+
+import { supabase } from '@/lib/supabaseClient'
+
+export function usePlayers() {
+
+&nbsp; const createPlayer = async (payload) => {
+
+&nbsp;   const { data, error } = await supabase.from('players').insert(payload).select().single()
+
+&nbsp;   if (error) throw error; return data
+
+&nbsp; }
+
+&nbsp; const updatePlayer = async (id, patch) => {
+
+&nbsp;   const { data, error } = await supabase.from('players').update(patch).eq('id', id).select().single()
+
+&nbsp;   if (error) throw error; return data
+
+&nbsp; }
+
+&nbsp; const getPlayer = async (id) => {
+
+&nbsp;   const { data, error } = await supabase.from('players').select('\*').eq('id', id).single()
+
+&nbsp;   if (error) throw error; return data
+
+&nbsp; }
+
+&nbsp; const searchPlayers = async (q, org_id, sport_id) => {
+
+&nbsp;   let query = supabase.from('players').select('\*').eq('org_id', org_id).eq('sport_id', sport_id)
+
+&nbsp;   if (q) query = query.ilike('last_name', \`%\${q}%\`)
+
+&nbsp;   const { data, error } = await query
+
+&nbsp;   if (error) throw error; return data
+
+&nbsp; }
+
+&nbsp; const uploadPhoto = async (file, path) => {
+
+&nbsp;   const { data, error } = await supabase.storage.from('player-photos').upload(path, file, { upsert: true })
+
+&nbsp;   if (error) throw error; return data
+
+&nbsp; }
+
+&nbsp; return { createPlayer, updatePlayer, getPlayer, searchPlayers, uploadPhoto }
+
+}
+
+\`\`\`
+
+**\*\*\`src/hooks/useRegistrations.js\`\*\***
+
+\`\`\`javascript
+
+import { supabase } from '@/lib/supabaseClient'
+
+export function useRegistrations() {
+
+&nbsp; const submitRegistration = async (payload) => {
+
+&nbsp;   const { data, error } = await supabase.from('player_registrations').insert({ ...payload, status: 'SUBMITTED' }).select().single()
+
+&nbsp;   if (error) throw error; return data
+
+&nbsp; }
+
+&nbsp; const reviewRegistration = async (id, status, notes) => {
+
+&nbsp;   const { data, error } = await supabase.from('player_registrations').update({ status, review_notes: notes }).eq('id', id).select().single()
+
+&nbsp;   if (error) throw error; return data
+
+&nbsp; }
+
+&nbsp; const listRegistrations = async (tournament_id, status) => {
+
+&nbsp;   let q = supabase.from('player_registrations').select('\*, players(\*), teams(\* )').eq('tournament_id', tournament_id)
+
+&nbsp;   if (status) q = q.eq('status', status)
+
+&nbsp;   const { data, error } = await q
+
+&nbsp;   if (error) throw error; return data
+
+&nbsp; }
+
+&nbsp; return { submitRegistration, reviewRegistration, listRegistrations }
+
+}
+
+\`\`\`
+
+**\*\*\`src/hooks/useRosters.js\`\*\***
+
+\`\`\`javascript
+
+import { supabase } from '@/lib/supabaseClient'
+
+export function useRosters() {
+
+&nbsp; const ensureRoster = async (tournament_id, team_id) => {
+
+&nbsp;   const { data, error } = await supabase.from('team_rosters').upsert({ tournament_id, team_id }, { onConflict: 'tournament_id,team_id' }).select().single()
+
+&nbsp;   if (error) throw error; return data
+
+&nbsp; }
+
+&nbsp; const addToRoster = async ({ roster_id, player_id, squad_number, position }) => {
+
+&nbsp;   const { data, error } = await supabase.from('roster_members').insert({ roster_id, player_id, squad_number, position, status: 'APPROVED' }).select().single()
+
+&nbsp;   if (error) throw error; return data
+
+&nbsp; }
+
+&nbsp; const setSquadNumber = async (id, squad_number) => {
+
+&nbsp;   const { data, error } = await supabase.from('roster_members').update({ squad_number }).eq('id', id).select().single()
+
+&nbsp;   if (error) throw error; return data
+
+&nbsp; }
+
+&nbsp; const getTeamRoster = async (tournament_id, team_id) => {
+
+&nbsp;   const { data, error } = await supabase.rpc('get_roster_by_tournament_team', { p_tournament_id: tournament_id, p_team_id: team_id })
+
+&nbsp;   if (error) throw error; return data
+
+&nbsp; }
+
+&nbsp; return { ensureRoster, addToRoster, setSquadNumber, getTeamRoster }
+
+}
+
+\`\`\`
+
+**\*\*\`src/hooks/useTransfers.js\`\*\***
+
+\`\`\`javascript
+
+import { supabase } from '@/lib/supabaseClient'
+
+export function useTransfers() {
+
+&nbsp; const requestTransfer = async (payload) => {
+
+&nbsp;   const { data, error } = await supabase.from('transfer_requests').insert(payload).select().single()
+
+&nbsp;   if (error) throw error; return data
+
+&nbsp; }
+
+&nbsp; const setStatus = async (id, status, fields={}) => {
+
+&nbsp;   const { data, error } = await supabase.from('transfer_requests').update({ status, ...fields }).eq('id', id).select().single()
+
+&nbsp;   if (error) throw error; return data
+
+&nbsp; }
+
+&nbsp; const listTransfers = async (tournament_id, status) => {
+
+&nbsp;   let q = supabase.from('transfer_requests').select('\*, players(\*), from:teams!transfer_requests_from_team_id_fkey(\*), to:teams!transfer_requests_to_team_id_fkey(\*)').eq('tournament_id', tournament_id)
+
+&nbsp;   if (status) q = q.eq('status', status)
+
+&nbsp;   const { data, error } = await q
+
+&nbsp;   if (error) throw error; return data
+
+&nbsp; }
+
+&nbsp; return { requestTransfer, setStatus, listTransfers }
+
+}
+
+\`\`\`
+
+**\*\*\`src/hooks/usePayments.js\`\*\*** (STK push stub)
+
+\`\`\`javascript
+
+import { supabase } from '@/lib/supabaseClient'
+
+export function usePayments() {
+
+&nbsp; const createInvoice = async (payload) => {
+
+&nbsp;   const { data, error } = await supabase.from('invoices').insert(payload).select().single()
+
+&nbsp;   if (error) throw error; return data
+
+&nbsp; }
+
+&nbsp; const startMpesaStkPush = async (invoiceId, phone) => {
+
+&nbsp;   const res = await fetch('/.netlify/functions/mpesa-stk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ invoiceId, phone }) })
+
+&nbsp;   if (!res.ok) throw new Error('STK init failed');
+
+&nbsp;   return res.json()
+
+&nbsp; }
+
+&nbsp; const pollPayment = async (invoiceId) => {
+
+&nbsp;   const { data, error } = await supabase.from('invoices').select('status, paid_at').eq('id', invoiceId).single()
+
+&nbsp;   if (error) throw error; return data
+
+&nbsp; }
+
+&nbsp; return { createInvoice, startMpesaStkPush, pollPayment }
+
+}
+
+\`\`\`
+
+**\### 25.2 Components**
+
+**\*\*\`src/components/Player/PlayerForm.jsx\`\*\***
+
+\`\`\`jsx
+
+import { useForm } from 'react-hook-form'
+
+import { usePlayers } from '@/hooks/usePlayers'
+
+export default function PlayerForm({ org_id, sport_id, onCreated }) {
+
+&nbsp; const { register, handleSubmit, reset } = useForm()
+
+&nbsp; const { createPlayer, uploadPhoto } = usePlayers()
+
+&nbsp; const onSubmit = async (f) => {
+
+&nbsp;   let photo_path
+
+&nbsp;   if (f.photo?.\[0\]) {
+
+&nbsp;     const path = \`\${org_id}/\${crypto.randomUUID()}\_\${f.photo\[0\].name}\`
+
+&nbsp;     await uploadPhoto(f.photo\[0\], path)
+
+&nbsp;     photo_path = path
+
+&nbsp;   }
+
+&nbsp;   const player = await createPlayer({
+
+&nbsp;     org_id, sport_id,
+
+&nbsp;     first_name: f.first_name, last_name: f.last_name,
+
+&nbsp;     dob: f.dob, sex: f.sex, photo_path
+
+&nbsp;   })
+
+&nbsp;   reset(); onCreated?.(player)
+
+&nbsp; }
+
+&nbsp; return (
+
+&nbsp;   &lt;form onSubmit={handleSubmit(onSubmit)} className="space-y-3"&gt;
+
+&nbsp;     &lt;div className="grid grid-cols-2 gap-3"&gt;
+
+&nbsp;       &lt;input className="input" placeholder="First name" {...register('first_name', { required: true })} /&gt;
+
+&nbsp;       &lt;input className="input" placeholder="Last name" {...register('last_name', { required: true })} /&gt;
+
+&nbsp;     &lt;/div&gt;
+
+&nbsp;     &lt;div className="grid grid-cols-3 gap-3"&gt;
+
+&nbsp;       &lt;input className="input" type="date" {...register('dob', { required: true })} /&gt;
+
+&nbsp;       &lt;select className="input" {...register('sex')}&gt;
+
+&nbsp;         &lt;option value="MALE"&gt;Male&lt;/option&gt;
+
+&nbsp;         &lt;option value="FEMALE"&gt;Female&lt;/option&gt;
+
+&nbsp;         &lt;option value="OTHER"&gt;Other&lt;/option&gt;
+
+&nbsp;       &lt;/select&gt;
+
+&nbsp;       &lt;input className="input" type="file" accept="image/\*" {...register('photo')} /&gt;
+
+&nbsp;     &lt;/div&gt;
+
+&nbsp;     &lt;button className="btn"&gt;Save Player&lt;/button&gt;
+
+&nbsp;   &lt;/form&gt;
+
+&nbsp; )
+
+}
+
+\`\`\`
+
+**\*\*\`src/components/Tournament/RegistrationReviewQueue.jsx\`\*\***
+
+\`\`\`jsx
+
+import { useEffect, useState } from 'react'
+
+import { useRegistrations } from '@/hooks/useRegistrations'
+
+export default function RegistrationReviewQueue({ tournament_id }) {
+
+&nbsp; const { listRegistrations, reviewRegistration } = useRegistrations()
+
+&nbsp; const \[items, setItems\] = useState(\[\])
+
+&nbsp; const load = async () => setItems(await listRegistrations(tournament_id, 'SUBMITTED'))
+
+&nbsp; useEffect(() => { load() }, \[tournament_id\])
+
+&nbsp; const act = async (id, status) => { await reviewRegistration(id, status); await load() }
+
+&nbsp; return (
+
+&nbsp;   &lt;div className="space-y-2"&gt;
+
+&nbsp;     {items.map((r) => (
+
+&nbsp;       &lt;div key={r.id} className="border p-3 rounded flex items-center justify-between"&gt;
+
+&nbsp;         &lt;div&gt;
+
+&nbsp;           &lt;div className="font-medium"&gt;{r.players?.first_name} {r.players?.last_name}&lt;/div&gt;
+
+&nbsp;           &lt;div className="text-sm opacity-70"&gt;Team: {r.teams?.name}&lt;/div&gt;
+
+&nbsp;         &lt;/div&gt;
+
+&nbsp;         &lt;div className="space-x-2"&gt;
+
+&nbsp;           &lt;button className="btn" onClick={() =&gt; act(r.id, 'APPROVED')}>Approve&lt;/button&gt;
+
+&nbsp;           &lt;button className="btn" onClick={() =&gt; act(r.id, 'REJECTED')}>Reject&lt;/button&gt;
+
+&nbsp;         &lt;/div&gt;
+
+&nbsp;       &lt;/div&gt;
+
+&nbsp;     ))}
+
+&nbsp;   &lt;/div&gt;
+
+&nbsp; )
+
+}
+
+\`\`\`
+
+_\*(Scaffolds for \`PlayerIdDocs.jsx\`, \`SquadNumberManager.jsx\`, \`TransferCenter.jsx\`, and pages \`Players.jsx\`, \`Registrations.jsx\`, \`Rosters.jsx\`, \`Transfers.jsx\` follow the same minimal pattern.)\*_
+
+\---
+
+**\## 26) SQL Migration - Players & Transfers (Full)**
+
+\> Use a new migration file, e.g. \`20251011_players_transfers_payments.sql\`.
+
+\`\`\`sql
+
+\-- ===== Enums =====
+
+DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname='sex_enum') THEN CREATE TYPE sex_enum AS ENUM ('MALE','FEMALE','OTHER'); END IF; END \$\$;
+
+DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname='id_type_enum') THEN CREATE TYPE id_type_enum AS ENUM ('NATIONAL_ID','BIRTH_CERT','PASSPORT','STUDENT_ID','OTHER'); END IF; END \$\$;
+
+DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname='player_status_enum') THEN CREATE TYPE player_status_enum AS ENUM ('ACTIVE','SUSPENDED','RETIRED'); END IF; END \$\$;
+
+DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname='registration_status_enum') THEN CREATE TYPE registration_status_enum AS ENUM ('DRAFT','SUBMITTED','VERIFIED','APPROVED','REJECTED','WITHDRAWN'); END IF; END \$\$;
+
+DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname='roster_member_status_enum') THEN CREATE TYPE roster_member_status_enum AS ENUM ('PENDING','APPROVED','REJECTED','TRANSFERRED','LEFT'); END IF; END \$\$;
+
+DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname='transfer_status_enum') THEN CREATE TYPE transfer_status_enum AS ENUM ('REQUESTED','ORIGIN_CLEARED','DEST_ACCEPTED','REGISTRAR_APPROVED','APPROVED','REJECTED','CANCELLED'); END IF; END \$\$;
+
+DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname='invoice_status_enum') THEN CREATE TYPE invoice_status_enum AS ENUM ('PENDING','PAID','CANCELLED','REFUNDED'); END IF; END \$\$;
+
+\-- ===== Players =====
+
+CREATE TABLE IF NOT EXISTS players (
+
+&nbsp; id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+&nbsp; org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE RESTRICT,
+
+&nbsp; sport_id UUID NOT NULL REFERENCES sports(id) ON DELETE RESTRICT,
+
+&nbsp; gpc_code TEXT UNIQUE,
+
+&nbsp; first_name TEXT NOT NULL,
+
+&nbsp; last_name  TEXT NOT NULL,
+
+&nbsp; other_names TEXT,
+
+&nbsp; dob DATE NOT NULL,
+
+&nbsp; sex sex_enum,
+
+&nbsp; nationality TEXT DEFAULT 'Kenya',
+
+&nbsp; photo_path TEXT,
+
+&nbsp; preferred_positions TEXT\[\],
+
+&nbsp; status player_status_enum DEFAULT 'ACTIVE',
+
+&nbsp; created_by UUID REFERENCES auth.users(id),
+
+&nbsp; created_at TIMESTAMPTZ DEFAULT now(),
+
+&nbsp; updated_at TIMESTAMPTZ DEFAULT now()
+
+);
+
+CREATE TABLE IF NOT EXISTS player_ids (
+
+&nbsp; id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+&nbsp; org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE RESTRICT,
+
+&nbsp; player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+
+&nbsp; id_type id_type_enum NOT NULL,
+
+&nbsp; id_number TEXT NOT NULL,
+
+&nbsp; issuing_authority TEXT,
+
+&nbsp; document_path TEXT,
+
+&nbsp; verified BOOLEAN DEFAULT false,
+
+&nbsp; verified_at TIMESTAMPTZ,
+
+&nbsp; UNIQUE (org_id, id_type, id_number)
+
+);
+
+\-- ===== Rosters =====
+
+CREATE TABLE IF NOT EXISTS team_rosters (
+
+&nbsp; id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+&nbsp; tournament_id UUID NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+
+&nbsp; team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+
+&nbsp; created_at TIMESTAMPTZ DEFAULT now(),
+
+&nbsp; UNIQUE (tournament_id, team_id)
+
+);
+
+CREATE TABLE IF NOT EXISTS roster_members (
+
+&nbsp; id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+&nbsp; roster_id UUID NOT NULL REFERENCES team_rosters(id) ON DELETE CASCADE,
+
+&nbsp; player_id UUID NOT NULL REFERENCES players(id) ON DELETE RESTRICT,
+
+&nbsp; squad_number INT CHECK (squad_number BETWEEN 1 AND 99),
+
+&nbsp; jersey_name TEXT,
+
+&nbsp; position TEXT,
+
+&nbsp; status roster_member_status_enum DEFAULT 'PENDING',
+
+&nbsp; joined_at TIMESTAMPTZ DEFAULT now(),
+
+&nbsp; left_at TIMESTAMPTZ,
+
+&nbsp; UNIQUE (roster_id, player_id) WHERE status IN ('PENDING','APPROVED'),
+
+&nbsp; UNIQUE (roster_id, squad_number) WHERE status IN ('PENDING','APPROVED')
+
+);
+
+\-- ===== Registrations =====
+
+CREATE TABLE IF NOT EXISTS player_registrations (
+
+&nbsp; id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+&nbsp; tournament_id UUID NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+
+&nbsp; team_id UUID NOT NULL REFERENCES teams(id) ON DELETE RESTRICT,
+
+&nbsp; player_id UUID NOT NULL REFERENCES players(id) ON DELETE RESTRICT,
+
+&nbsp; status registration_status_enum NOT NULL DEFAULT 'DRAFT',
+
+&nbsp; submitted_by UUID REFERENCES auth.users(id),
+
+&nbsp; reviewed_by  UUID REFERENCES auth.users(id),
+
+&nbsp; review_notes TEXT,
+
+&nbsp; created_at TIMESTAMPTZ DEFAULT now(),
+
+&nbsp; updated_at TIMESTAMPTZ DEFAULT now(),
+
+&nbsp; UNIQUE (tournament_id, team_id, player_id)
+
+);
+
+\-- ===== Transfers =====
+
+CREATE TABLE IF NOT EXISTS transfer_requests (
+
+&nbsp; id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+&nbsp; tournament_id UUID NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+
+&nbsp; player_id UUID NOT NULL REFERENCES players(id) ON DELETE RESTRICT,
+
+&nbsp; from_team_id UUID NOT NULL REFERENCES teams(id) ON DELETE RESTRICT,
+
+&nbsp; to_team_id   UUID NOT NULL REFERENCES teams(id) ON DELETE RESTRICT,
+
+&nbsp; requested_by UUID REFERENCES auth.users(id),
+
+&nbsp; status transfer_status_enum DEFAULT 'REQUESTED',
+
+&nbsp; origin_clearer_id UUID REFERENCES auth.users(id),
+
+&nbsp; dest_approver_id  UUID REFERENCES auth.users(id),
+
+&nbsp; registrar_id      UUID REFERENCES auth.users(id),
+
+&nbsp; reason TEXT,
+
+&nbsp; decided_at TIMESTAMPTZ,
+
+&nbsp; created_at TIMESTAMPTZ DEFAULT now(),
+
+&nbsp; CONSTRAINT ck_distinct_teams CHECK (from_team_id <> to_team_id)
+
+);
+
+\-- ===== Number History (optional) =====
+
+CREATE TABLE IF NOT EXISTS player_number_history (
+
+&nbsp; id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+&nbsp; player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+
+&nbsp; tournament_id UUID NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+
+&nbsp; team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+
+&nbsp; squad_number INT NOT NULL,
+
+&nbsp; from_date DATE NOT NULL DEFAULT CURRENT_DATE,
+
+&nbsp; to_date DATE
+
+);
+
+\-- ===== Payments =====
+
+CREATE TABLE IF NOT EXISTS invoices (
+
+&nbsp; id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+&nbsp; org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE RESTRICT,
+
+&nbsp; tournament_id UUID REFERENCES tournaments(id) ON DELETE CASCADE,
+
+&nbsp; player_id UUID REFERENCES players(id) ON DELETE SET NULL,
+
+&nbsp; team_id UUID REFERENCES teams(id) ON DELETE SET NULL,
+
+&nbsp; purpose TEXT NOT NULL,
+
+&nbsp; amount_ksh NUMERIC(10,2) NOT NULL,
+
+&nbsp; status invoice_status_enum DEFAULT 'PENDING',
+
+&nbsp; meta JSONB,
+
+&nbsp; created_at TIMESTAMPTZ DEFAULT now(),
+
+&nbsp; paid_at TIMESTAMPTZ
+
+);
+
+CREATE TABLE IF NOT EXISTS payments (
+
+&nbsp; id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+&nbsp; invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+
+&nbsp; method TEXT NOT NULL,
+
+&nbsp; provider_ref TEXT,
+
+&nbsp; amount_ksh NUMERIC(10,2) NOT NULL,
+
+&nbsp; success BOOLEAN DEFAULT false,
+
+&nbsp; created_at TIMESTAMPTZ DEFAULT now()
+
+);
+
+\-- ===== Public Roster View =====
+
+CREATE OR REPLACE VIEW v_public_roster AS
+
+SELECT t.id AS tournament_id, tr.team_id, rm.player_id,
+
+&nbsp;      p.first_name, p.last_name, rm.squad_number, rm.position, p.photo_path
+
+FROM tournaments t
+
+JOIN team_rosters tr ON tr.tournament_id = t.id
+
+JOIN roster_members rm ON rm.roster_id = tr.id AND rm.status = 'APPROVED'
+
+JOIN players p ON p.id = rm.player_id
+
+WHERE t.is_published = true;
+
+\-- ===== RLS (basic dev posture) =====
+
+ALTER TABLE players ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE player_ids ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE team_rosters ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE roster_members ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE player_registrations ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE transfer_requests ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY players_read   ON players   FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY players_write  ON players   FOR INSERT, UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY pids_read      ON player_ids FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY pids_write     ON player_ids FOR INSERT, UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY trost_read     ON team_rosters FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY trost_write    ON team_rosters FOR INSERT, UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY rmem_read      ON roster_members FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY rmem_write     ON roster_members FOR INSERT, UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY preg_read      ON player_registrations FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY preg_write     ON player_registrations FOR INSERT, UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY trans_read     ON transfer_requests FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY trans_write    ON transfer_requests FOR INSERT, UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY inv_read       ON invoices FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY inv_write      ON invoices FOR INSERT, UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY pay_read       ON payments FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY pay_write      ON payments FOR INSERT TO authenticated USING (true) WITH CHECK (true);
+
+\-- TODO: tighten RLS to org/tournament memberships when org_members is available.
+
+\`\`\`
+
+\---
+
+**\## 27) One‑Shot PowerShell - Generate Players Module Files**
+
+\> Run from the project root. This creates folders/files with the minimal code above and empty stubs for the rest.
+
+\`\`\`powershell
+
+\$ErrorActionPreference = 'Stop'
+
+\# Folders
+
+\$folders = @(
+
+&nbsp; 'src/components/Player',
+
+&nbsp; 'src/components/Tournament',
+
+&nbsp; 'src/hooks',
+
+&nbsp; 'src/pages',
+
+&nbsp; 'src/lib/payments'
+
+)
+
+foreach (\$f in \$folders) { New-Item -ItemType Directory -Path \$f -Force | Out-Null }
+
+\# Hooks
+
+Set-Content src/hooks/usePlayers.js @'
+
+// (content from blueprint §25.1 usePlayers.js)
+
+'@
+
+Set-Content src/hooks/useRegistrations.js @'
+
+// (content from blueprint §25.1 useRegistrations.js)
+
+'@
+
+Set-Content src/hooks/useRosters.js @'
+
+// (content from blueprint §25.1 useRosters.js)
+
+'@
+
+Set-Content src/hooks/useTransfers.js @'
+
+// (content from blueprint §25.1 useTransfers.js)
+
+'@
+
+Set-Content src/hooks/usePayments.js @'
+
+// (content from blueprint §25.1 usePayments.js)
+
+'@
+
+\# Components
+
+Set-Content src/components/Player/PlayerForm.jsx @'
+
+// (content from blueprint §25.2 PlayerForm.jsx)
+
+'@
+
+Set-Content src/components/Tournament/RegistrationReviewQueue.jsx @'
+
+// (content from blueprint §25.2 RegistrationReviewQueue.jsx)
+
+'@
+
+\# Empty stubs you can fill next
+
+@(
+
+&nbsp; 'src/components/Player/PlayerIdDocs.jsx',
+
+&nbsp; 'src/components/Player/SquadNumberManager.jsx',
+
+&nbsp; 'src/components/Player/TransferCenter.jsx',
+
+&nbsp; 'src/pages/Players.jsx',
+
+&nbsp; 'src/pages/Registrations.jsx',
+
+&nbsp; 'src/pages/Rosters.jsx',
+
+&nbsp; 'src/pages/Transfers.jsx'
+
+) | ForEach-Object { Set-Content \$_ "export default function Stub(){return (&lt;div className=\\"p-6\\"&gt;Stub: \$\_&lt;/div&gt;) }" }
+
+"Players module scaffolds created. Fill stubs per blueprint §25.2."
+
+\`\`\`
+
+\---
+
+**\## 28) Routing & Navigation (quick add)**
+
+Add routes in \`App.jsx\` (or your router file):
+
+\`\`\`jsx
+
+import Players from '@/pages/Players'
+
+import Registrations from '@/pages/Registrations'
+
+import Rosters from '@/pages/Rosters'
+
+import Transfers from '@/pages/Transfers'
+
+// inside &lt;Routes&gt;
+
+&lt;Route path="/players" element={<Players/&gt;} />
+
+&lt;Route path="/registrations" element={<Registrations/&gt;} />
+
+&lt;Route path="/rosters" element={<Rosters/&gt;} />
+
+&lt;Route path="/transfers" element={<Transfers/&gt;} />
+
+\`\`\`
+
+\> With these sections, the blueprint now fully covers players, monetisation, and working scaffolds + SQL to execute immediately.
+
+**PROJECT DIAGRAM STRUCTURE**
+
+Here you go-clean, text-only "drawings" for both the **project** and the **src** layout, with brief notes so your team knows what lives where.
+
+**Project structure (root)**
+
+jamii-tourney-v3/
+
+├─ .gitignore
+
+├─ README.md # quickstart + env notes
+
+├─ package.json
+
+├─ index.html
+
+├─ vite.config.js # path alias "@", dev server, etc.
+
+├─ tailwind.config.js
+
+├─ postcss.config.js
+
+├─ netlify.toml # build + redirects; functions passthrough
+
+├─ .env.example # VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
+
+├─ public/ # static assets served as-is
+
+│ ├─ favicon.svg
+
+│ └─ icons/
+
+├─ docs/ # product docs (blueprints, checklists)
+
+│ └─ Jamii_Tourney_v3_Blueprint.md
+
+├─ supabase/ # DB migrations & seeds
+
+│ ├─ migrations/
+
+│ │ ├─ 000_core_schema.sql # enums, tournaments, stages, etc.
+
+│ │ ├─ 001_players_transfers.sql # players, ids, rosters, transfers
+
+│ │ └─ 002_payments.sql # invoices, payments
+
+│ └─ seeds/ # sample org/teams (non-sensitive)
+
+├─ netlify/ # Netlify Functions (serverless)
+
+│ └─ functions/
+
+│ └─ mpesa-stk.js # STK init + callback handler (stub)
+
+├─ scripts/ # local tooling & scaffolds
+
+│ └─ scaffold_players.ps1 # creates Player module files
+
+└─ src/ # application source (see next section)
+
+**src structure (application code)**
+
+src/
+
+├─ main.jsx # app bootstrap
+
+├─ App.jsx # routes/layout shell
+
+├─ index.css # Tailwind entry + light theming
+
+├─ assets/ # images, logos, illustrations
+
+│ └─ logos/
+
+├─ styles/ # optional extra css modules
+
+│ └─ tokens.css
+
+├─ lib/ # framework-agnostic utilities
+
+│ ├─ supabaseClient.js # Supabase JS init
+
+│ ├─ export/
+
+│ │ └─ xlsx.js # Excel export helpers
+
+│ ├─ fixtures/
+
+│ │ └─ roundRobin.js # weekend-first generator (logic)
+
+│ ├─ payments/
+
+│ │ └─ mpesa.js # client-side STK invocation wrapper
+
+│ ├─ utils/
+
+│ │ ├─ dates.js # weekend/KO helpers
+
+│ │ └─ formatting.js # names, slugs, etc.
+
+│ └─ constants/
+
+│ └─ federation.js # FKF/Schools/Corporate presets (data)
+
+├─ hooks/ # data flows (Supabase + UI logic)
+
+│ ├─ useTournaments.js # CRUD + publish, filters
+
+│ ├─ useLeagueCustomizer.js # divisions, tiebreakers, groups
+
+│ ├─ useInterCountyManager.js # counties + slot allocations
+
+│ ├─ usePlayers.js # players CRUD + photo upload
+
+│ ├─ useRegistrations.js # registration queue actions
+
+│ ├─ useRosters.js # roster ensure/add/set-number
+
+│ ├─ useTransfers.js # request/approve transfer lifecycle
+
+│ └─ usePayments.js # invoices + STK status/polling
+
+├─ components/
+
+│ ├─ UI/ # shared primitives
+
+│ │ ├─ Button.jsx
+
+│ │ ├─ Card.jsx
+
+│ │ └─ Table.jsx
+
+│ ├─ Layout/ # global shell
+
+│ │ ├─ NavBar.jsx
+
+│ │ ├─ Sidebar.jsx
+
+│ │ └─ Footer.jsx
+
+│ ├─ Tournament/
+
+│ │ ├─ TournamentForm.js # create/edit tournament
+
+│ │ ├─ TournamentList.js
+
+│ │ ├─ TournamentCard.js
+
+│ │ ├─ TournamentTeams.js # attach teams/import CSV
+
+│ │ ├─ KenyanAdminSelector.js # ward/sub-county/county pickers
+
+│ │ ├─ TournamentHierarchy.js # stage/division/group summary
+
+│ │ ├─ InterCountySelector.js # multi-county with slots
+
+│ │ ├─ RegistrationReviewQueue.jsx # registrar approvals
+
+│ │ ├─ LeagueCustomizer/
+
+│ │ │ ├─ LeagueStructureBuilder.js
+
+│ │ │ ├─ DivisionManager.js
+
+│ │ │ ├─ PromotionRelegationSettings.js
+
+│ │ │ └─ FederationSettings.js
+
+│ │ └─ ModelSpecificManagers/
+
+│ │ ├─ WardTournamentManager.js
+
+│ │ ├─ SubCountyTournamentManager.js
+
+│ │ ├─ CountyTournamentManager.js
+
+│ │ ├─ NationalTournamentManager.js
+
+│ │ ├─ InterCountyManager.js
+
+│ │ ├─ IndependentTournamentManager.js
+
+│ │ └─ LeagueManager.js
+
+│ ├─ Player/ # player lifecycle
+
+│ │ ├─ PlayerForm.jsx # create/edit + photo
+
+│ │ ├─ PlayerIdDocs.jsx # ID uploads, verification UI
+
+│ │ ├─ PlayerCard.jsx # compact view
+
+│ │ ├─ PlayerList.jsx # search/filter list
+
+│ │ ├─ SquadNumberManager.jsx # per-team numbers 1-99
+
+│ │ ├─ TransferCenter.jsx # request/clear/approve UX
+
+│ │ └─ PlayerCardPreview.jsx # printable/QR badges
+
+│ ├─ Fixtures/
+
+│ │ ├─ FixtureList.jsx
+
+│ │ ├─ FixtureEditor.jsx
+
+│ │ └─ FixtureExportButton.jsx
+
+│ └─ Standings/
+
+│ ├─ StandingsTable.jsx
+
+│ └─ StandingsExportButton.jsx
+
+├─ pages/ # routed screens
+
+│ ├─ Home.jsx
+
+│ ├─ Tournaments.jsx # list + create
+
+│ ├─ Fixtures.jsx # schedule, edit, export
+
+│ ├─ Standings.jsx # tables per division/group
+
+│ ├─ Players.jsx # directory + add player
+
+│ ├─ Registrations.jsx # queue for approvals
+
+│ ├─ Rosters.jsx # per-team roster mgmt
+
+│ ├─ Transfers.jsx # cross-team moves
+
+│ ├─ Settings.jsx # tournament settings (fees, rules)
+
+│ └─ NotFound.jsx
+
+├─ tests/ # unit/integration
+
+│ ├─ fixtures.test.js
+
+│ └─ standings.test.js
+
+└─ mocks/ # test data for dev/staging
+
+└─ sample-teams.json
+
+**Quick notes (what belongs where)**
+
+- **Players module**: components/Player/\* + hooks/usePlayers.js, useRegistrations.js, useRosters.js, useTransfers.js.
+- **Monetisation touchpoints**: hooks/usePayments.js + lib/payments/mpesa.js; server side counterpart under netlify/functions/mpesa-stk.js.
+- **Scheduling/fixtures**: logic under lib/fixtures/, UI under components/Fixtures/, routed via pages/Fixtures.jsx.
+- **League configuration**: components/Tournament/LeagueCustomizer/\* + hooks/useLeagueCustomizer.js.
+- **Inter-County**: InterCountySelector.js + useInterCountyManager.js.
+- **Exports**: lib/export/xlsx.js and export buttons in **Fixtures**/**Standings** components.
+
+**ALL MODULES BREAK DOWN**
+
+awesome-here's a clean, no-code breakdown of **all modules** in Jamii Tourney v3 and exactly what each one does.
+
+**0) High-level map (what lives where)**
+
+- **Foundation:** Auth & Orgs, Roles/RLS, Settings, Storage/Media
+- **Competition design:** Tournament Setup, Geography/Admin, Inter-County, League Customizer
+- **Participants:** Teams, Players, Registrations, Rosters, Transfers, Squad Numbers
+- **Game ops:** Fixtures & Scheduling, Matches & Results, Standings
+- **Money & outputs:** Payments, Exports/Reports, Public Portal
+- **Experience:** Search & Filters, Notifications, Admin/Audit
+
+**1) Authentication & Organizations**
+
+**What it does:** Sign-in, org selection, role assignment, sport scoping.  
+**Users:** System Admin, Organizers, Officials, Team Managers, Players.  
+**Key functions**
+
+- Secure sign-in/out; choose active organization.
+- Roles mapping (e.g., County Officer, Registrar, Team Manager).
+- Sport scoping (e.g., Football, Volleyball later).
+- Session persistence and basic profile (name, phone, avatar).  
+    **Success:** Correct role-based access everywhere; no cross-org data leaks.
+
+**2) Settings & Templates**
+
+**What it does:** Global and per-tournament settings, presets.  
+**Key functions**
+
+- Tournament defaults (weekends-only, 13:00 KO, fees strategy).
+- Federation templates (FKF, Schools, Corporate) for structures.
+- Branding (logo, colors), export formats, age-group rules.  
+    **Success:** New comps set up fast; consistent rules without rework.
+
+**3) Tournament Setup (7 models)**
+
+**What it does:** Create and configure tournaments across all models.  
+**Key functions**
+
+- Create/edit: name, season, dates, model type, status, publish.
+- Admin models: enforce correct geography (ward/sub-county/county/national).
+- Independent model: open registration options.
+- League model: seed a league stage to customize later.
+- Clone/duplicate previous season (optional).  
+    **Validations:** Dates correct; model ↔ geography rules enforced.  
+    **Success:** Organizer gets from idea → configured shell in minutes.
+
+**4) Geography / Administrative Module**
+
+**What it does:** Kenyan admin structure handling.  
+**Key functions**
+
+- Pick county → sub-county → ward; auto-inherit where needed.
+- Eligibility checks tied to geography (e.g., school location).
+- Discovery by region (filters for users).  
+    **Success:** No mis-tagged events; easy regional browsing.
+
+**5) Inter-County Module**
+
+**What it does:** Multi-county tournaments and slot allocation.  
+**Key functions**
+
+- Select participating counties; group by region.
+- Per-county slots: base, bonus, wildcard.
+- Qualification rules per county (optional).  
+    **Success:** Transparent county participation and fair slots.
+
+**6) League Customizer**
+
+**What it does:** Build divisions, groups, and playoffs.  
+**Key functions**
+
+- Divisions/tiers, groups/pools, matchdays/legs.
+- Points scheme (W/D/L), tiebreakers order (Points, GD, GF, H2H, etc.).
+- Promotion/relegation counts; optional playoffs.  
+    **Success:** Structures match real-world leagues with minimal clicks.
+
+**7) Teams Module**
+
+**What it does:** Manage teams globally and per tournament.  
+**Key functions**
+
+- Team CRUD, logos, contacts, home venue.
+- CSV import (bulk add).
+- Attach teams to tournaments; eligibility checks (age/region).  
+    **Success:** Clean team directory; quick onboarding to tournaments.
+
+**8) Players Module**
+
+**What it does:** Player identities, docs, photos, positions.  
+**Key functions**
+
+- Player profile (name, DoB, sex, nationality, positions).
+- Identity docs & photos (upload, verify).
+- Duplicate prevention (same ID number within org).  
+    **Success:** Verified players with minimal admin back-and-forth.
+
+**9) Registration & Approvals**
+
+**What it does:** Link a player to a team within a tournament via a controlled workflow.  
+**Initiators:** Team-driven (default), Player self-service (invite + confirm), or Admin bulk import.  
+**Key functions**
+
+- Create/submit registrations; review queue for Registrar.
+- Statuses: Draft → Submitted → Verified → Approved/Rejected → Withdrawn.
+- Option to require payment **before review** or **after approval**.  
+    **Success:** Smooth queue; clear audit trail; predictable turnaround.
+
+**10) Rosters & Squad Numbers**
+
+**What it does:** Tournament-specific team membership and shirt numbers.  
+**Key functions**
+
+- Ensure roster per team/tournament.
+- Approve players into roster; enforce **one active team per player per tournament**.
+- Unique squad numbers **1-99** per team; optional reserved iconic numbers.
+- Number history over time (optional record).  
+    **Success:** Zero number conflicts; rosters ready for matchday sheets.
+
+**11) Transfers**
+
+**What it does:** In-season player moves between teams in the same tournament.  
+**Key functions**
+
+- Request → Origin clearance → Destination acceptance → Registrar approval.
+- Auto-close previous membership; open new membership.
+- Handle number collisions (prevent or choose a new number).  
+    **Success:** No "ghost" memberships; full audit for disputes.
+
+**12) Fixtures & Scheduling**
+
+**What it does:** Generate and manage schedules.  
+**Key functions**
+
+- Round-robin generator (single/double), BYE handling for odd teams.
+- Weekend-first rule with default kickoff time; manual overrides allowed.
+- Venue/time edits, clash detection (team/venue/time conflicts).
+- Locking periods (e.g., after publish) to avoid late surprises.  
+    **Success:** Schedules done in minutes; minimal conflicts; easy tweaks.
+
+**13) Matches & Results Entry**
+
+**What it does:** Record outcomes and basic events.  
+**Key functions**
+
+- Match status (Scheduled → In Progress → Completed → Postponed).
+- Score entry (home/away), optional simple events (goal, card) later.
+- Forfeits/walkovers; admin notes.  
+    **Success:** Results posted quickly and consistently across divisions.
+
+**14) Standings / Tables**
+
+**What it does:** Calculate and display standings per division/group.  
+**Key functions**
+
+- Auto-update on result save; configurable tiebreakers.
+- Multiple tables (e.g., overall, home/away, form) later.
+- Export standings for comms and press.  
+    **Success:** Tables match official rules every time.
+
+**15) Payments & Monetisation**
+
+**What it does:** Collect fees tied to player/tournament actions.  
+**Charge points**
+
+- Player registration (per season/tournament)
+- Transfer fee (configurable split: origin/destination/organizer)
+- Late registration surcharge
+- Premium shirt numbers (e.g., #7, #10)
+- Player ID card replacement  
+    **Flow**
+- Invoice created at payable step → MPesa STK initiated → on success unlock next step (review or activation).  
+    **Success:** High payment completion; clear fee policy and receipts.
+
+**16) Exports & Reports**
+
+**What it does:** One-click outputs for ops & comms.  
+**Key outputs**
+
+- Fixtures: date, time, home, away, venue, stage, round.
+- Standings: played, W/D/L, GF/GA/GD, points, position.
+- Rosters: approved players with numbers and positions.
+- Financials: invoices, collected amounts, outstanding.  
+    **Success:** Organizers share reliable docs without manual formatting.
+
+**17) Public Portal**
+
+**What it does:** Publicly viewable site for published tournaments.  
+**Key views**
+
+- Fixtures and results, standings, teams, approved rosters (safe fields only).
+- Search/filter by region, model, federation, status.
+- Sponsor/branding placements.  
+    **Success:** Fans and stakeholders find what they need instantly.
+
+**18) Search & Discovery**
+
+**What it does:** Find tournaments/teams/players fast.  
+**Key functions**
+
+- Filters by model (Administrative/Inter-County/Independent/League), region, federation, status, access.
+- Fuzzy name search; popular shortcuts (e.g., "Nairobi county finals").  
+    **Success:** Seconds to reach the right page.
+
+**19) Notifications & Communication (nice-to-have)**
+
+**What it does:** Keep everyone in the loop.  
+**Key functions**
+
+- Email/SMS or in-app alerts for approvals, schedule changes, payment status.
+- Daily digests for organizers (pending reviews, unpaid items).  
+    **Success:** Fewer missed deadlines and last-minute scrambles.
+
+**20) Storage & Media**
+
+**What it does:** Manage images and files.  
+**Key functions**
+
+- Buckets for player photos, team logos, documents.
+- Size/type limits; simple cropping (later).  
+    **Success:** Fast loads and clean, consistent media.
+
+**21) Admin & Audit**
+
+**What it does:** Oversight and governance.  
+**Key functions**
+
+- Activity trails on sensitive flows (approvals, transfers, payments).
+- Role reviews (who has Registrar, Officer privileges).
+- Data quality checks (duplicate players, missing IDs).  
+    **Success:** Trustworthy records and quick incident resolution.
+
+**22) KPIs by module (quick hit)**
+
+- **Tournament Setup:** time-to-publish; template usage rate.
+- **Registrations:** approval turnaround; rejection reasons; fee conversion.
+- **Rosters:** conflict rate (duplicate numbers/memberships).
+- **Fixtures:** clash count; reschedule rate.
+- **Standings:** update latency after result entry.
+- **Payments:** completion %, revenue per competition, unpaid aging.
+- **Public Portal:** unique visitors, top pages, average time on page.
+
+**How modules connect (example flows)**
+
+- **Create tournament → Configure structure → Attach teams → Register players → Approve → Assign numbers → Generate fixtures → Enter results → Standings update → Publish → Public views & Exports.**
+- **Transfer:** Request → Origin clearance → Destination acceptance → Registrar approval → Roster auto-update → (optional fee capture).

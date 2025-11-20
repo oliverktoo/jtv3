@@ -15,7 +15,8 @@ import { useOrganizations } from "@/hooks/useReferenceData";
 import { useToast } from "@/hooks/use-toast";
 import { insertTransferSchema, type Transfer } from "@shared/schema";
 import { format } from "date-fns";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { supabase } from "@/lib/supabase";
 
 const createTransferFormSchema = insertTransferSchema.extend({
   upid: z.string().min(1, "Player is required"),
@@ -27,11 +28,27 @@ type CreateTransferFormValues = z.infer<typeof createTransferFormSchema>;
 
 function useTransfers(orgId: string) {
   return useQuery<Transfer[]>({
-    queryKey: ["/api/organizations", orgId, "transfers"],
+    queryKey: ["transfers", "organization", orgId],
     queryFn: async () => {
-      const res = await fetch(`/api/organizations/${orgId}/transfers`);
-      if (!res.ok) throw new Error("Failed to fetch transfers");
-      return res.json();
+      const { data, error } = await supabase
+        .from('transfers')
+        .select(`
+          *,
+          from_teams:from_team_id (
+            id,
+            name,
+            club_name
+          ),
+          to_teams:to_team_id (
+            id,
+            name,
+            club_name
+          )
+        `)
+        .or(`from_teams.org_id.eq.${orgId},to_teams.org_id.eq.${orgId}`);
+      
+      if (error) throw new Error(`Failed to fetch transfers: ${error.message}`);
+      return data || [];
     },
     enabled: !!orgId,
   });
@@ -40,12 +57,28 @@ function useTransfers(orgId: string) {
 function useCreateTransfer() {
   return useMutation({
     mutationFn: async (data: CreateTransferFormValues) => {
-      return apiRequest("POST", "/api/transfers", data);
+      const { data: transfer, error } = await supabase
+        .from('transfers')
+        .insert({
+          upid: data.upid,
+          from_team_id: data.fromTeamId,
+          to_team_id: data.toTeamId,
+          org_id: data.orgId,
+          transfer_type: data.transferType,
+          status: 'PENDING',
+          request_date: data.requestDate,
+          notes: data.notes
+        })
+        .select()
+        .single();
+      
+      if (error) throw new Error(`Failed to create transfer: ${error.message}`);
+      return transfer;
     },
     onSuccess: (_result, variables) => {
       // Invalidate based on the orgId from the mutation data
-      queryClient.invalidateQueries({ queryKey: ["/api/organizations", variables.orgId, "transfers"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/transfers"] });
+      queryClient.invalidateQueries({ queryKey: ["transfers", "organization", variables.orgId] });
+      queryClient.invalidateQueries({ queryKey: ["transfers"] });
     },
   });
 }
@@ -53,28 +86,54 @@ function useCreateTransfer() {
 function useUpdateTransfer() {
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<Transfer> }) => {
-      return apiRequest("PATCH", `/api/transfers/${id}`, data);
+      const { data: transfer, error } = await supabase
+        .from('transfers')
+        .update(data)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw new Error(`Failed to update transfer: ${error.message}`);
+      return transfer;
     },
     onSuccess: (_result, variables) => {
       // Invalidate based on the orgId from the mutation data
       if (variables.data.orgId) {
-        queryClient.invalidateQueries({ queryKey: ["/api/organizations", variables.data.orgId, "transfers"] });
+        queryClient.invalidateQueries({ queryKey: ["transfers", "organization", variables.data.orgId] });
       }
-      queryClient.invalidateQueries({ queryKey: ["/api/transfers"] });
+      queryClient.invalidateQueries({ queryKey: ["transfers"] });
     },
   });
 }
 
 function usePlayers(orgId: string) {
   return useQuery<any[]>({
-    queryKey: ["/api/players", orgId],
+    queryKey: ["players", "organization", orgId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('player_registry')
+        .select('*')
+        .eq('org_id', orgId);
+      
+      if (error) throw new Error(`Failed to fetch players: ${error.message}`);
+      return data || [];
+    },
     enabled: !!orgId,
   });
 }
 
 function useTeams(orgId: string) {
   return useQuery<any[]>({
-    queryKey: ["/api/teams", orgId],
+    queryKey: ["teams", "organization", orgId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('teams')
+        .select('*')
+        .eq('org_id', orgId);
+      
+      if (error) throw new Error(`Failed to fetch teams: ${error.message}`);
+      return data || [];
+    },
     enabled: !!orgId,
   });
 }

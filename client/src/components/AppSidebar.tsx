@@ -10,14 +10,18 @@ import {
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { Home, Trophy, Calendar, BarChart3, Users, Settings, FileText, ArrowRightLeft, AlertTriangle, FileCheck, Shield, FileBarChart, LogOut, UserCog } from "lucide-react";
+import { Home, Trophy, Calendar, BarChart3, Users, Settings, FileText, ArrowRightLeft, AlertTriangle, FileCheck, Shield, FileBarChart, UserCog, User, UserCheck, QrCode, Crown, MapPin } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 
 const menuItems = [
   { title: "Dashboard", url: "/", icon: Home },
+  { title: "My Profile", url: "/profile", icon: User },
+  { title: "Registrar Console", url: "/registrar", icon: UserCheck },
+  { title: "Manager Dashboard", url: "/manager", icon: Crown },
+  { title: "Player Cards", url: "/cards", icon: QrCode },
+  { title: "Kenya Geography", url: "/geography", icon: MapPin },
   { title: "Tournaments", url: "/tournaments", icon: Trophy },
   { title: "Teams", url: "/teams", icon: Users },
   { title: "Players", url: "/players", icon: Users },
@@ -26,7 +30,6 @@ const menuItems = [
   { title: "Disciplinary", url: "/disciplinary", icon: AlertTriangle },
   { title: "Documents", url: "/documents", icon: FileCheck },
   { title: "Eligibility", url: "/eligibility", icon: Shield },
-  { title: "Fixtures", url: "/fixtures", icon: Calendar },
   { title: "Standings", url: "/standings", icon: BarChart3 },
   { title: "Reports", url: "/reports", icon: FileBarChart },
   { title: "Settings", url: "/settings", icon: Settings },
@@ -95,7 +98,7 @@ export default function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="p-4 border-t space-y-3">
+      <SidebarFooter className="p-4 border-t">
         <div className="flex items-center gap-3">
           <Avatar className="h-8 w-8" data-testid="avatar-user">
             <AvatarImage src={user?.profileImageUrl || undefined} />
@@ -112,18 +115,6 @@ export default function AppSidebar() {
             </p>
           </div>
         </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className="w-full" 
-          asChild
-          data-testid="button-logout"
-        >
-          <a href="/api/logout">
-            <LogOut className="h-4 w-4 mr-2" />
-            Sign Out
-          </a>
-        </Button>
       </SidebarFooter>
     </Sidebar>
   );

@@ -1,5 +1,5 @@
-import { IStorage } from "./storage";
-import type { PlayerRegistry, EligibilityRule, Contract, DisciplinaryRecord, PlayerDocument } from "@shared/schema";
+import { IStorage } from "./storage.js";
+import type { PlayerRegistry, EligibilityRule, Contract, DisciplinaryRecord, PlayerDocument } from "../shared/schema.js";
 
 export interface EligibilityCheckResult {
   eligible: boolean;

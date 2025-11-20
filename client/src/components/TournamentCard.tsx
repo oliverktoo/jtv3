@@ -37,6 +37,7 @@ interface TournamentCardProps {
   teamCount?: number;
   location?: string;
   sport: string;
+  organizationName?: string;
   onView?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -71,14 +72,16 @@ export default function TournamentCard({
   teamCount = 0,
   location,
   sport,
+  organizationName,
   onView,
   onEdit,
   onDelete,
 }: TournamentCardProps) {
   return (
     <Card
-      className="hover-elevate p-6"
+      className="hover-elevate p-6 cursor-pointer transition-all"
       data-testid={`card-tournament-${id}`}
+      onClick={onView}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
@@ -100,11 +103,23 @@ export default function TournamentCard({
               <Trophy className="h-4 w-4 text-muted-foreground" />
               <span className="text-foreground">{sport}</span>
             </div>
+            {organizationName && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Organizer:</span>
+                <span className="text-foreground font-medium">{organizationName}</span>
+              </div>
+            )}
             <div className="flex items-center gap-2 text-sm">
               <Calendar className="h-4 w-4 text-muted-foreground" />
               <span className="text-foreground font-mono">
-                {format(new Date(startDate), "MMM d, yyyy")} -{" "}
-                {format(new Date(endDate), "MMM d, yyyy")}
+                {startDate && endDate ? (
+                  <>
+                    {format(new Date(startDate), "MMM d, yyyy")} -{" "}
+                    {format(new Date(endDate), "MMM d, yyyy")}
+                  </>
+                ) : (
+                  "Dates TBD"
+                )}
               </span>
             </div>
             {location && (
@@ -128,6 +143,7 @@ export default function TournamentCard({
               size="icon"
               variant="ghost"
               data-testid={`button-menu-${id}`}
+              onClick={(e) => e.stopPropagation()}
             >
               <MoreVertical className="h-4 w-4" />
             </Button>

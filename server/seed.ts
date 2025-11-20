@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db } from "./db.js";
 import {
   organizations,
   sports,
@@ -11,7 +11,7 @@ import {
   leagueDivisions,
   groups,
   teamGroups,
-} from "@shared/schema";
+} from "../shared/schema.js";
 
 async function seed() {
   console.log("Seeding database...");

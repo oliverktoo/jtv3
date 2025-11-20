@@ -16,6 +16,7 @@ interface FixtureCardProps {
   status: MatchStatus;
   round?: string;
   stage?: string;
+  group?: string;
   onClick?: () => void;
 }
 
@@ -38,9 +39,33 @@ export default function FixtureCard({
   status,
   round,
   stage,
+  group,
   onClick,
 }: FixtureCardProps) {
-  const kickoffDate = new Date(kickoff);
+  // Safely parse the kickoff date with fallback
+  let kickoffDate: Date;
+  try {
+    if (!kickoff || kickoff === "TBD") {
+      kickoffDate = new Date();
+    } else {
+      kickoffDate = new Date(kickoff);
+      // Check if date is valid
+      if (isNaN(kickoffDate.getTime())) {
+        // Try parsing MM/dd/yyyy HH:mm:ss format specifically
+        const parts = kickoff.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})/);
+        if (parts) {
+          const [, month, day, year, hour, minute, second] = parts;
+          kickoffDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute), parseInt(second));
+        } else {
+          kickoffDate = new Date(); // Fallback to current date
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('Invalid kickoff date:', kickoff, error);
+    kickoffDate = new Date(); // Fallback to current date
+  }
+  
   const isCompleted = status === "COMPLETED";
 
   return (
@@ -50,7 +75,7 @@ export default function FixtureCard({
       data-testid={`card-fixture-${id}`}
     >
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {round && (
             <span className="text-sm text-muted-foreground font-medium">
               {round}
@@ -59,6 +84,11 @@ export default function FixtureCard({
           {stage && (
             <Badge variant="outline" className="text-xs">
               {stage}
+            </Badge>
+          )}
+          {group && (
+            <Badge variant="secondary" className="text-xs font-semibold bg-primary/10 text-primary border-primary/20">
+              {group}
             </Badge>
           )}
         </div>
@@ -103,7 +133,10 @@ export default function FixtureCard({
         <div className="flex items-center gap-1">
           <Clock className="h-4 w-4" />
           <span className="font-mono">
-            {format(kickoffDate, "EEE, MMM d")} • {format(kickoffDate, "HH:mm")}
+            {kickoffDate && !isNaN(kickoffDate.getTime()) 
+              ? `${format(kickoffDate, "EEE, MMM d")} • ${format(kickoffDate, "HH:mm")}`
+              : "TBD"
+            }
           </span>
         </div>
         {venue && (
