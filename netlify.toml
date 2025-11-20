@@ -7,23 +7,15 @@
   VITE_SUPABASE_URL = "https://siolrhalqvpzerthdluq.supabase.co"
   VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpb2xyaGFscXZwemVydGhkbHVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEwMDUzMTIsImV4cCI6MjA3NjU4MTMxMn0.e_a2rgODJk7m1Dvu0KZykECmZ0hbm9fy0FSjvx21lEo"
   VITE_API_URL = "https://jtv3-production.up.railway.app"
-  # Add your backend URL here or in Netlify dashboard
-  # VITE_API_URL = "https://your-backend-url.com"
 
-[functions]
-  directory = "netlify/functions"
-  node_bundler = "esbuild"
-
+# Proxy API requests to Railway backend
 [[redirects]]
-  from = "/api/fixtures/venues"
-  to = "/.netlify/functions/venues"
+  from = "/api/*"
+  to = "https://jtv3-production.up.railway.app/api/:splat"
   status = 200
+  force = true
 
-[[redirects]]
-  from = "/api/tournaments/:tournamentId/groups"
-  to = "/.netlify/functions/groups"
-  status = 200
-
+# SPA Fallback
 [[redirects]]
   from = "/*"
   to = "/index.html"
