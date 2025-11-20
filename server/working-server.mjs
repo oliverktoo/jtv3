@@ -22,7 +22,8 @@ import {
 } from './api-middleware.mjs';
 
 const app = express();
-const PORT = 5000;
+const PORT = Number(process.env.PORT) || 5000;
+const HOST = process.env.HOST || '0.0.0.0';
 
 // Middleware
 app.use(express.json());
@@ -49,7 +50,8 @@ app.use((req, res, next) => {
     'http://127.0.0.1:5174',
     'http://127.0.0.1:5175',
     'http://127.0.0.1:5176',
-    'http://127.0.0.1:5177'
+    'http://127.0.0.1:5177',
+    'https://jamiisportske.netlify.app'
   ];
   
   if (allowedOrigins.includes(origin)) {
@@ -5558,21 +5560,25 @@ app.use(errorHandler);
 const server = createServer(app);
 let wsServer;
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`🚀 Jamii Tourney server running on http://127.0.0.1:${PORT}`);
+server.listen(PORT, HOST, () => {
+  const displayHost = HOST === '0.0.0.0' ? '127.0.0.1' : HOST;
+  const baseUrl = process.env.RENDER_EXTERNAL_URL || `http://${displayHost}:${PORT}`;
+  const wsBaseUrl = baseUrl.replace(/^http/, 'ws');
+
+  console.log(`🚀 Jamii Tourney server running on ${baseUrl}`);
   console.log(`📅 Started at: ${new Date().toISOString()}`);
   console.log(`🗄️ Database: Supabase`);
-  console.log(`📡 Health check: http://127.0.0.1:${PORT}/api/health`);
-  console.log(`📊 Platform stats: http://127.0.0.1:${PORT}/api/platform/stats`);
-  console.log(`🏆 All tournaments: http://127.0.0.1:${PORT}/api/tournaments/all`);
-  console.log(`👥 All teams: http://127.0.0.1:${PORT}/api/teams/all`);
-  console.log(`🏃 All players: http://127.0.0.1:${PORT}/api/players/all`);
-  console.log(`🔍 Player search: http://127.0.0.1:${PORT}/api/players/search?orgId=X&q=Y`);
+  console.log(`📡 Health check: ${baseUrl}/api/health`);
+  console.log(`📊 Platform stats: ${baseUrl}/api/platform/stats`);
+  console.log(`🏆 All tournaments: ${baseUrl}/api/tournaments/all`);
+  console.log(`👥 All teams: ${baseUrl}/api/teams/all`);
+  console.log(`🏃 All players: ${baseUrl}/api/players/all`);
+  console.log(`🔍 Player search: ${baseUrl}/api/players/search?orgId=X&q=Y`);
 
   // Initialize WebSocket server for enterprise live updates
   try {
     wsServer = new EnterpriseWebSocketServer(server, supabase);
-    console.log(`🔌 Enterprise WebSocket server ready on ws://127.0.0.1:${PORT}`);
+    console.log(`🔌 Enterprise WebSocket server ready on ${wsBaseUrl}`);
     console.log(`📡 Live updates: Subscribe to tournament channels for real-time data`);
   } catch (wsError) {
     console.error('❌ WebSocket server initialization failed:', wsError);
