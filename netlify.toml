@@ -6,7 +6,7 @@
   NODE_VERSION = "20"
   VITE_SUPABASE_URL = "https://siolrhalqvpzerthdluq.supabase.co"
   VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpb2xyaGFscXZwemVydGhkbHVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEwMDUzMTIsImV4cCI6MjA3NjU4MTMxMn0.e_a2rgODJk7m1Dvu0KZykECmZ0hbm9fy0FSjvx21lEo"
-  VITE_API_URL = "https://jamii-tourney-backend.onrender.com"
+  VITE_API_URL = "https://jtv3-production.up.railway.app"
   # Add your backend URL here or in Netlify dashboard
   # VITE_API_URL = "https://your-backend-url.com"
 
