@@ -104,7 +104,7 @@ export default function RoleBasedSidebar({ className }: RoleBasedSidebarProps) {
   const [location] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['core']));
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   
   const userRoles = getUserRoles(user);
   const navigation = getNavigationForRole(userRoles);
@@ -355,10 +355,16 @@ export default function RoleBasedSidebar({ className }: RoleBasedSidebarProps) {
         
         {/* Action Buttons */}
         <div className="flex gap-1">
-          <Button variant="ghost" size="sm" className="flex-1">
+          <Button variant="ghost" size="sm" className="flex-1" title="Settings">
             <Settings className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm" className="flex-1">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="flex-1 text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={() => logout()}
+            title="Log Out"
+          >
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
