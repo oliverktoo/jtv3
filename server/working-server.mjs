@@ -1,6 +1,7 @@
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { createServer } from 'http';
+import { randomUUID } from 'crypto';
 import { EnterpriseWebSocketServer } from './EnterpriseWebSocketServer.js';
 import { AdvancedFixtureGenerator, FixtureOptimizer, AdvancedStandingsEngine } from './fixture-engine.mjs';
 import { 
@@ -78,7 +79,55 @@ console.log('🔧 Supabase Key:', supabaseKey.substring(0, 20) + '...');
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Health check endpoint
+// Function to ensure specialized admin tables exist
+async function ensureSpecializedAdminTables() {
+  console.log('🔧 Checking specialized admin tables...');
+  
+  try {
+    // Check team_managers table
+    const { data: teamManagersData, error: teamManagersError } = await supabase
+      .from('team_managers')
+      .select('id')
+      .limit(1);
+    
+    if (teamManagersError && teamManagersError.code === 'PGRST116') {
+      console.log('⚠️ team_managers table does not exist. Please run create-specialized-admin-tables.sql in Supabase');
+    } else {
+      console.log('✅ team_managers table exists');
+    }
+    
+    // Check tournament_admins table
+    const { data: tournamentAdminsData, error: tournamentAdminsError } = await supabase
+      .from('tournament_admins')
+      .select('id')
+      .limit(1);
+    
+    if (tournamentAdminsError && tournamentAdminsError.code === 'PGRST116') {
+      console.log('⚠️ tournament_admins table does not exist. Please run create-specialized-admin-tables.sql in Supabase');
+    } else {
+      console.log('✅ tournament_admins table exists');
+    }
+    
+    // Check organization_admins table
+    const { data: organizationAdminsData, error: organizationAdminsError } = await supabase
+      .from('organization_admins')
+      .select('id')
+      .limit(1);
+    
+    if (organizationAdminsError && organizationAdminsError.code === 'PGRST116') {
+      console.log('⚠️ organization_admins table does not exist. Please run create-specialized-admin-tables.sql in Supabase');
+    } else {
+      console.log('✅ organization_admins table exists');
+    }
+    
+    console.log('✅ Specialized admin tables check completed');
+    
+  } catch (error) {
+    console.log('⚠️ Admin tables check error (continuing anyway):', error.message);
+  }
+}
+
+// Health check endpoint with specialized admin tables setup
 app.get('/api/health', async (req, res) => {
   try {
     console.log('🏥 Health check requested');
@@ -95,6 +144,9 @@ app.get('/api/health', async (req, res) => {
     }
     
     console.log('✅ Supabase connection successful');
+    
+    // Check and create specialized admin tables if they don't exist
+    await ensureSpecializedAdminTables();
     
     res.json({
       status: 'healthy',
@@ -115,109 +167,292 @@ app.get('/api/health', async (req, res) => {
 });
 
 // ============================================
+// Debug endpoint to check signup parameters
+app.post('/api/debug/signup-params', async (req, res) => {
+  const { email, password, firstName, lastName, organizationName, role, tournamentId, requestType, userType, phoneNumber } = req.body;
+  
+  res.json({
+    received: {
+      email,
+      password: password ? '[HIDDEN]' : undefined,
+      firstName,
+      lastName,
+      organizationName,
+      role,
+      tournamentId,
+      requestType,
+      userType,
+      phoneNumber
+    },
+    conditions: {
+      isTeamManager: userType === 'team_manager',
+      isTournamentAdmin: userType === 'tournament_admin', 
+      isOrgAdmin: userType === 'organization_admin',
+      isRequestAdmin: requestType === 'REQUEST_ADMIN',
+      hasOrgName: !!organizationName
+    }
+  });
+});
+
 // AUTHENTICATION ENDPOINTS
 // ============================================
 
-// Signup endpoint
+// Signup endpoint with specialized admin tables approach
 app.post('/api/auth/signup', async (req, res) => {
   try {
-    const { email, password, firstName, lastName, organizationName, role } = req.body;
+    const { email, password, firstName, lastName, organizationName, role, tournamentId, requestType, userType, phoneNumber } = req.body;
     
     console.log('📝 Signup request for:', email);
+    console.log('📝 Request type:', requestType);
+    console.log('📝 User type:', userType);
+    console.log('📝 Tournament ID:', tournamentId);
     
     // Validate required fields
-    if (!email || !password || !firstName || !lastName || !organizationName) {
+    if (!email || !password || !firstName || !lastName) {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields'
       });
     }
+
+    console.log('🔧 Creating user with specialized admin table approach');
     
-    // Check if user already exists
-    const { data: existingUser } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', email)
-      .single();
+    let authUser;
+    let adminRecord;
     
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        error: 'Email already registered'
+    try {
+      // Step 1: Create user in Supabase Auth only (no public.users table)
+      console.log('📝 Creating auth user via signup...');
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: email,
+        password: password,
+        options: {
+          data: {
+            first_name: firstName,
+            last_name: lastName,
+            phone: phoneNumber,
+            user_type: userType || requestType,
+            admin_type: userType || 'TOURNAMENT_ADMIN'
+          }
+        }
       });
-    }
-    
-    // Create organization first
-    // Generate unique slug from organization name + timestamp
-    const baseSlug = organizationName
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    const slug = `${baseSlug}-${Date.now()}`;
-    
-    const { data: org, error: orgError } = await supabase
-      .from('organizations')
-      .insert([{
-        name: organizationName,
-        slug: slug,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }])
-      .select()
-      .single();
-    
-    if (orgError) {
-      console.error('❌ Organization creation error:', orgError);
-      throw orgError;
-    }
-    
-    // Create user (password should be hashed in production)
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .insert([{
-        email,
-        first_name: firstName,
-        last_name: lastName,
-        profile_image_url: null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }])
-      .select()
-      .single();
-    
-    if (userError) {
-      console.error('❌ User creation error:', userError);
-      throw userError;
-    }
-    
-    // Create user role
-    const { error: roleError } = await supabase
-      .from('user_organization_roles')
-      .insert([{
-        user_id: user.id,
-        org_id: org.id,
-        role: role || 'ORG_ADMIN',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }]);
-    
-    if (roleError) {
-      console.error('❌ Role creation error:', roleError);
-      throw roleError;
-    }
-    
-    console.log('✅ User created successfully:', user.id);
-    
-    res.json({
-      success: true,
-      message: 'Account created successfully',
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.first_name,
-        lastName: user.last_name
+      
+      if (authError) {
+        console.error('❌ Auth signup failed:', authError);
+        throw authError;
       }
-    });
+      
+      authUser = authData.user;
+      console.log('✅ Auth user created:', authUser?.id);
+      
+      if (!authUser) {
+        throw new Error('Auth signup returned no user data');
+      }
+      
+      // Step 2: Create record in appropriate specialized table based on user type
+      console.log('🔍 Debug: Checking userType conditions...');
+      console.log('🔍 userType value:', userType);
+      console.log('🔍 userType type:', typeof userType);
+      console.log('🔍 requestType value:', requestType);
+      console.log('🔍 organizationName value:', organizationName);
+      
+      if (userType === 'team_manager') {
+        console.log('👥 Creating team manager record...');
+        
+        const { data: teamManagerData, error: teamManagerError } = await supabase
+          .from('team_managers')
+          .insert({
+            auth_user_id: authUser.id,
+            email: email,
+            first_name: firstName,
+            last_name: lastName,
+            phone: phoneNumber,
+            status: 'ACTIVE',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+          
+        if (teamManagerError) {
+          console.error('❌ Team manager record creation failed:', teamManagerError);
+          throw teamManagerError;
+        }
+        
+        adminRecord = teamManagerData;
+        console.log('✅ Team manager record created:', adminRecord.id);
+        
+      } else if (userType === 'tournament_admin') {
+        console.log('🏆 Creating tournament admin record...');
+        
+        const { data: tournamentAdminData, error: tournamentAdminError } = await supabase
+          .from('tournament_admins')
+          .insert({
+            auth_user_id: authUser.id,
+            email: email,
+            first_name: firstName,
+            last_name: lastName,
+            phone: phoneNumber,
+            tournament_id: tournamentId,
+            status: 'PENDING', // Requires approval
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+          
+        if (tournamentAdminError) {
+          console.error('❌ Tournament admin record creation failed:', tournamentAdminError);
+          throw tournamentAdminError;
+        }
+        
+        adminRecord = tournamentAdminData;
+        console.log('✅ Tournament admin record created:', adminRecord.id);
+        
+      } else if (userType === 'organization_admin') {
+        console.log('🏢 Creating organization admin record...');
+        
+        const { data: orgAdminData, error: orgAdminError } = await supabase
+          .from('organization_admins')
+          .insert({
+            auth_user_id: authUser.id,
+            email: email,
+            first_name: firstName,
+            last_name: lastName,
+            phone: phoneNumber,
+            organization_id: req.body.organizationId || '550e8400-e29b-41d4-a716-446655440001', // Default org ID
+            role: role || 'ORG_ADMIN',
+            status: 'ACTIVE',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+          
+        if (orgAdminError) {
+          console.error('❌ Organization admin record creation failed:', orgAdminError);
+          throw orgAdminError;
+        }
+        
+        adminRecord = orgAdminData;
+        console.log('✅ Organization admin record created:', adminRecord.id);
+        
+      } else if (requestType === 'REQUEST_ADMIN') {
+        console.log('🏆 Creating tournament admin record (legacy path)...');
+        
+        const { data: tournamentAdminData, error: tournamentAdminError } = await supabase
+          .from('tournament_admins')
+          .insert({
+            auth_user_id: authUser.id,
+            email: email,
+            first_name: firstName,
+            last_name: lastName,
+            phone: phoneNumber,
+            tournament_id: tournamentId,
+            status: 'PENDING', // Requires approval
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+          
+        if (tournamentAdminError) {
+          console.error('❌ Tournament admin record creation failed:', tournamentAdminError);
+          throw tournamentAdminError;
+        }
+        
+        adminRecord = tournamentAdminData;
+        console.log('✅ Tournament admin record created:', adminRecord.id);
+        
+      } else if (organizationName) {
+        console.log('🏢 Creating organization admin record (legacy path with org creation)...');
+        
+        // Create organization first if needed
+        let org = null;
+        if (organizationName) {
+          const baseSlug = organizationName
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+          const slug = `${baseSlug}-${Date.now()}`;
+          
+          const { data: newOrg, error: orgError } = await supabase
+            .from('organizations')
+            .insert([{
+              name: organizationName,
+              slug: slug,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            }])
+            .select()
+            .single();
+          
+          if (orgError) {
+            console.error('❌ Organization creation error:', orgError);
+            throw orgError;
+          }
+          org = newOrg;
+        }
+        
+        const { data: orgAdminData, error: orgAdminError } = await supabase
+          .from('organization_admins')
+          .insert({
+            auth_user_id: authUser.id,
+            email: email,
+            first_name: firstName,
+            last_name: lastName,
+            phone: phoneNumber,
+            organization_id: org?.id,
+            role: role || 'ORG_ADMIN',
+            status: 'ACTIVE',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+          
+        if (orgAdminError) {
+          console.error('❌ Organization admin record creation failed:', orgAdminError);
+          throw orgAdminError;
+        }
+        
+        adminRecord = orgAdminData;
+        console.log('✅ Organization admin record created:', adminRecord.id);
+      } else {
+        console.log('⚠️ No matching condition found for user type creation');
+        console.log('⚠️ userType:', userType);
+        console.log('⚠️ requestType:', requestType);
+        console.log('⚠️ organizationName:', organizationName);
+      }
+
+      // Determine response message based on signup type
+      let message = 'Account created successfully';
+      if (requestType === 'REQUEST_ADMIN') {
+        message = 'Tournament admin request submitted successfully';
+      } else if (userType === 'TEAM_MANAGER') {
+        message = 'Team manager account created successfully';
+      } else if (organizationName) {
+        message = 'Organization admin account created successfully';
+      }
+      
+      res.json({
+        success: true,
+        message: message,
+        user: {
+          auth_id: authUser.id,
+          email: authUser.email,
+          firstName: firstName,
+          lastName: lastName,
+          userType: userType || 'TOURNAMENT_ADMIN',
+          adminRecord: adminRecord
+        }
+      });
+      
+    } catch (creationError) {
+      console.error('❌ User creation completely failed:', creationError);
+      throw creationError;
+    }
+    
   } catch (error) {
     console.error('❌ Signup error:', error);
     res.status(500).json({
@@ -225,9 +460,7 @@ app.post('/api/auth/signup', async (req, res) => {
       error: error.message || 'Signup failed'
     });
   }
-});
-
-// Login endpoint
+});// Login endpoint
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -430,6 +663,53 @@ app.post('/api/users/make-super-admin', async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message
+    });
+  }
+});
+
+// Assign role to user
+app.post('/api/users/assign-role', async (req, res) => {
+  try {
+    const { userId, role, teamId, orgId } = req.body;
+    console.log(`👤 Assigning role to user:`, { userId, role, teamId, orgId });
+
+    // Validate required fields
+    if (!userId || !role) {
+      return res.status(400).json({
+        success: false,
+        error: 'User ID and role are required'
+      });
+    }
+
+    // Insert user role assignment
+    const { data, error } = await supabase
+      .from('user_organization_roles')
+      .insert([{
+        user_id: userId,
+        org_id: orgId || null, // null for platform-wide roles
+        role: role,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Role assignment error:', error);
+      throw error;
+    }
+
+    console.log(`✅ Role ${role} assigned to user ${userId}`);
+    res.json({
+      success: true,
+      data: data,
+      message: `Role ${role} assigned successfully`
+    });
+  } catch (error) {
+    console.error('❌ Role assignment error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to assign role'
     });
   }
 });
@@ -1307,6 +1587,108 @@ app.get('/api/organizations/:orgId/stats', async (req, res) => {
   }
 });
 
+// Geography endpoints for form dropdowns
+app.get('/api/counties', async (req, res) => {
+  try {
+    console.log('🌍 Counties requested');
+    const { data: counties, error } = await supabase
+      .from('counties')
+      .select('id, name')
+      .order('name');
+    
+    if (error) {
+      console.error('❌ Counties error:', error);
+      throw error;
+    }
+    
+    console.log(`✅ Found ${counties?.length || 0} counties`);
+    res.json({
+      success: true,
+      data: counties || []
+    });
+  } catch (error) {
+    console.error('❌ Counties error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch counties'
+    });
+  }
+});
+
+app.get('/api/sub-counties', async (req, res) => {
+  try {
+    const { county_id } = req.query;
+    console.log(`🌍 Sub-counties requested for county: ${county_id}`);
+    
+    if (!county_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'county_id is required'
+      });
+    }
+    
+    const { data: subCounties, error } = await supabase
+      .from('sub_counties')
+      .select('id, name, county_id')
+      .eq('county_id', county_id)
+      .order('name');
+    
+    if (error) {
+      console.error('❌ Sub-counties error:', error);
+      throw error;
+    }
+    
+    console.log(`✅ Found ${subCounties?.length || 0} sub-counties`);
+    res.json({
+      success: true,
+      data: subCounties || []
+    });
+  } catch (error) {
+    console.error('❌ Sub-counties error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch sub-counties'
+    });
+  }
+});
+
+app.get('/api/wards', async (req, res) => {
+  try {
+    const { sub_county_id } = req.query;
+    console.log(`🌍 Wards requested for sub-county: ${sub_county_id}`);
+    
+    if (!sub_county_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'sub_county_id is required'
+      });
+    }
+    
+    const { data: wards, error } = await supabase
+      .from('wards')
+      .select('id, name, sub_county_id')
+      .eq('sub_county_id', sub_county_id)
+      .order('name');
+    
+    if (error) {
+      console.error('❌ Wards error:', error);
+      throw error;
+    }
+    
+    console.log(`✅ Found ${wards?.length || 0} wards`);
+    res.json({
+      success: true,
+      data: wards || []
+    });
+  } catch (error) {
+    console.error('❌ Wards error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch wards'
+    });
+  }
+});
+
 // Tournaments endpoint
 app.get('/api/tournaments', async (req, res) => {
   try {
@@ -2123,6 +2505,48 @@ app.get('/api/teams/all', async (req, res) => {
   }
 });
 
+// Teams search endpoint for player registration
+app.get('/api/teams/search', async (req, res) => {
+  try {
+    const { q, orgId } = req.query;
+    console.log(`🔍 Searching teams - query: "${q}", orgId: ${orgId}`);
+    
+    let query = supabase
+      .from('teams')
+      .select('id, name, club_name, logo_url, org_id, organizations(name)');
+    
+    // Apply search filter if query provided
+    if (q && q.trim()) {
+      const searchTerm = q.trim();
+      query = query.or(`name.ilike.%${searchTerm}%,club_name.ilike.%${searchTerm}%`);
+    }
+    
+    // Optionally filter by organization if provided
+    if (orgId) {
+      query = query.or(`org_id.eq.${orgId},org_id.is.null`); // Include org teams and independent teams
+    }
+    
+    query = query.order('name', { ascending: true }).limit(50); // Limit for performance
+    
+    const { data, error } = await query;
+    
+    if (error) throw error;
+    
+    console.log(`✅ Found ${data?.length || 0} teams matching search`);
+    res.json({ 
+      data: data || [], 
+      success: true,
+      total: data?.length || 0 
+    });
+  } catch (error) {
+    console.error('❌ Teams search error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Unknown error'
+    });
+  }
+});
+
 // Team CRUD operations
 // Create team (independent)
 app.post('/api/teams', async (req, res) => {
@@ -2626,7 +3050,7 @@ app.post('/api/player-registration/start', async (req, res) => {
   try {
     console.log('🆕 Starting player registration:', req.body);
     
-    const { firstName, lastName, dob, sex, email, phone, nationality, wardId, orgId } = req.body;
+    const { firstName, middleName, lastName, dob, sex, email, phone, nationality, wardId, orgId } = req.body;
     
     // Validate required fields
     if (!firstName || !lastName || !dob || !sex || !email || !phone || !nationality || !orgId) {
@@ -2638,13 +3062,14 @@ app.post('/api/player-registration/start', async (req, res) => {
 
     // Generate proper identity hash (similar to existing players)
     const crypto = await import('crypto');
-    const identityString = `${orgId}:${email.toLowerCase()}:${phone}:${firstName}:${lastName}`;
+    const identityString = `${orgId}:${email.toLowerCase()}:${phone}:${firstName}:${middleName || ''}:${lastName}`;
     const hashedIdentityKeys = crypto.createHash('sha256').update(identityString).digest('hex');
 
     // Create draft registration - using actual database field names
     const playerData = {
       hashed_identity_keys: hashedIdentityKeys,
       first_name: firstName,
+      middle_name: middleName || null,  // Include middle name
       last_name: lastName,
       dob: dob,
       sex: sex.toUpperCase(),
@@ -2665,7 +3090,7 @@ app.post('/api/player-registration/start', async (req, res) => {
     
     if (error) throw error;
     
-    console.log(`✅ Player registration started: ${firstName} ${lastName} (ID: ${data.id})`);
+    console.log(`✅ Player registration started: ${firstName} ${middleName ? middleName + ' ' : ''}${lastName} (ID: ${data.id})`);
     res.status(201).json({ 
       data: { 
         playerId: data.id, 
